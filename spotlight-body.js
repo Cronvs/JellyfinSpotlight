@@ -19,6 +19,13 @@ let trailerHoverTimeout = null;
 const getJellyfinAuth = () => {
     let token = null;
     let userId = null;
+    let serverUrl = '';
+
+    // Extract Server URL via ApiClient
+    if (window.parent && window.parent.ApiClient) {
+        serverUrl = window.parent.ApiClient.serverAddress();
+    }
+
     const initEl = window.parent.document.getElementById('jellyfin-initialization-data');
     if (initEl) {
         try {
@@ -27,13 +34,14 @@ const getJellyfinAuth = () => {
             userId = initJson?.User?.Id;
         } catch { }
     }
-    if (!token) {
+    if (!token || !serverUrl) {
         try {
             const raw = window.parent.localStorage.getItem('jellyfin_credentials');
             if (raw) {
                 const creds = JSON.parse(raw);
-                token = creds?.Servers?.[0]?.AccessToken;
-                userId = creds?.Servers?.[0]?.UserId;
+                token = token || creds?.Servers?.[0]?.AccessToken;
+                userId = userId || creds?.Servers?.[0]?.UserId;
+                serverUrl = serverUrl || creds?.Servers?.[0]?.ManualAddress || creds?.Servers?.[0]?.Url;
             }
         } catch { }
     }
@@ -42,10 +50,16 @@ const getJellyfinAuth = () => {
         const s = v?.currentSrc || v?.src || '';
         token = s.match(/[?&]api_key=([^&]+)/i)?.[1] || null;
     }
-    return { token, userId };
+
+    // Fallback and formatting
+    if (!serverUrl) serverUrl = window.parent.location.origin;
+    if (serverUrl.endsWith('/')) serverUrl = serverUrl.slice(0, -1);
+
+    return { token, userId, serverUrl };
 };
 
-const { token, userId: fallbackUserId } = getJellyfinAuth();
+// Expose the new serverUrl variable
+const { token, userId: fallbackUserId, serverUrl: baseUrl } = getJellyfinAuth();
 
 async function playMovie(itemId) {
     const client = window.parent.ApiClient;
@@ -60,7 +74,7 @@ async function playMovie(itemId) {
             PlayCommand: 'PlayNow',
             ItemIds: [itemId],
             StartPositionTicks: 0,
-            MediaSourceId: itemId, 
+            //MediaSourceId: itemId,
             ControllingUserId: client.getCurrentUserId() 
         });
     }
@@ -163,7 +177,7 @@ async function checkLocalTrailer(itemId) {
     if (!token || !uid) return null;
 
     try {
-        const res = await fetch(`/Users/${uid}/Items/${itemId}/LocalTrailers?api_key=${token}`);
+        const res = await fetch(`${baseUrl}/Users/${uid}/Items/${itemId}/LocalTrailers?api_key=${token}`);
         if (!res.ok) return null;
         const arr = await res.json();
         if (!arr?.length) return null;
@@ -171,7 +185,7 @@ async function checkLocalTrailer(itemId) {
         const t = arr[0];
         const mediaSourceId = t.MediaSources?.[0]?.Id;
         const streamUrl = mediaSourceId
-            ? `/Videos/${t.Id}/stream.mp4?Static=true&mediaSourceId=${mediaSourceId}&api_key=${token}`
+            ? `${baseUrl}/Videos/${t.Id}/stream.mp4?mediaSourceId=${mediaSourceId}&api_key=${token}`
             : null;
 
         return { trailer: t, streamUrl };
@@ -196,7 +210,7 @@ const createSlideElement = async (movie) => {
 
     // 1. Visuals
     const visualWrapper = createElem('div', 'visual-wrapper');
-    const backdropImg = createElem('img', 'backdrop', null, `/Items/${movie.Id}/Images/Backdrop/0`, 'backdrop');
+    const backdropImg = createElem('img', 'backdrop', null, `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`, 'backdrop');
     visualWrapper.appendChild(backdropImg);
     newSlide.appendChild(visualWrapper);
 
@@ -219,7 +233,7 @@ const createSlideElement = async (movie) => {
 
     const textContainer = createElem('div', 'text-container');
     const logoImg = new Image();
-    logoImg.src = `/Items/${movie.Id}/Images/Logo`;
+    logoImg.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
     logoImg.onload = () => textContainer.prepend(createElem('img', 'logo', null, logoImg.src, 'logo'));
     logoImg.onerror = () => {
         const titleEl = document.createElement('h1');
@@ -433,7 +447,7 @@ const fetchNextMovie = () => {
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
     
     // Added MinCommunityRating=4
-    fetch(`/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
+    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
         .then(r => r.json())
         .then(d => { 
             if (d.Items?.[0]) {
@@ -484,7 +498,7 @@ const validateAndLoad = (movie) => {
             fetchNextMovie();
         }
     };
-    imgBack.src = `/Items/${movie.Id}/Images/Backdrop/0`;
+    imgBack.src = `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`;
 
     // Check Logo
     const imgLogo = new Image();
@@ -496,7 +510,7 @@ const validateAndLoad = (movie) => {
             fetchNextMovie();
         }
     };
-    imgLogo.src = `/Items/${movie.Id}/Images/Logo`;
+    imgLogo.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
 };
 
 // New Function: Fetch a movie silently in the background
@@ -505,7 +519,7 @@ const preloadNextMovie = () => {
     if (!token || !uid) return;
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
     
-    fetch(`/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
+    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
         .then(r => r.json())
         .then(data => {
             if (data.Items?.[0]) {
@@ -525,11 +539,11 @@ const preloadNextMovie = () => {
 
                 imgBack.onload = () => { bOk = true; tryCache(); };
                 imgBack.onerror = () => { console.log("Preload fail: No Backdrop", mov.Name); preloadNextMovie(); };
-                imgBack.src = `/Items/${mov.Id}/Images/Backdrop/0`;
+                imgBack.src = `${baseUrl}/Items/${mov.Id}/Images/Backdrop/0`;
 
                 imgLogo.onload = () => { lOk = true; tryCache(); };
                 imgLogo.onerror = () => { console.log("Preload fail: No Logo", mov.Name); preloadNextMovie(); };
-                imgLogo.src = `/Items/${mov.Id}/Images/Logo`;
+                imgLogo.src = `${baseUrl}/Items/${mov.Id}/Images/Logo`;
             }
         });
 };
@@ -626,8 +640,51 @@ const attachButtonListeners = () => {
     }
 
     document.addEventListener('keydown', (e) => {
-        if (e.key === 'ArrowRight') fetchNextMovie();
-        if (e.key === 'ArrowLeft') navigatePrevious();
+        if (e.key === 'ArrowRight') {
+            fetchNextMovie();
+        }
+        else if (e.key === 'ArrowLeft') {
+            navigatePrevious();
+        }
+        else if (e.key === 'Enter') {
+            e.stopPropagation();
+            if (window.currentMovie && window.currentMovie.Id) {
+                playMovie(window.currentMovie.Id);
+            }
+        }
+        else if (e.key === 'ArrowDown') {
+            // Escape iframe: Push focus down to the first media card in Jellyfin
+            if (window.parent) {
+                const section0 = window.parent.document.querySelector('.section0');
+                const nextCard = section0 ? section0.querySelector('.card, .itemAction, .emby-button') : null;
+                if (nextCard) nextCard.focus();
+            }
+        }
+        else if (e.key === 'ArrowUp') {
+            // Escape iframe: Push focus up to the Jellyfin top menu header
+            if (window.parent) {
+                const topMenu = window.parent.document.querySelector('.headerTabs .emby-tab-button[data-index="0"]');
+                if (topMenu) topMenu.focus();
+            }
+        }
+	else if (e.keyCode === 10009) {
+            if (window.parent) {
+                const parentDoc = window.parent.document;
+
+                // Create a clone of the keydown event (Modern Tizen/Browsers)
+                const clonedEvent = new KeyboardEvent('keydown', {
+                    key: e.key,
+                    keyCode: e.keyCode,
+                    code: e.code,
+                    which: e.keyCode,
+                    bubbles: true,
+                    cancelable: true
+                });
+
+                // Dispatch it on the parent window so Jellyfin handles it natively
+                parentDoc.dispatchEvent(clonedEvent);
+            }
+        }
     });
 
     document.body.addEventListener('mouseenter', () => {

@@ -43,6 +43,8 @@
 ## 🛠️ Installation
 
 Simply inject the content of `injector.js` into the page (by using the jsinjector plugin for example)
+i.e. at the end of index.html `<script src="spotlight.js"></script>` before end of body (`</body></html>`)
+for tizen, include all the scripts in the dist directory after building, or www directory.
 
 Make sure to delete your browser's cache (reload with Ctrl+Shift+R, or delete the mobile app's cache)
 

@@ -1,9 +1,9 @@
 // Create an iframe and inject the Spotlight HTML/CSS
 (async function () {
-    const htmlUrl = "https://raw.githubusercontent.com/piorpiedev/JellyfinSpotlight/refs/heads/main/spotlight.html";
-    const cssUrl = "https://raw.githubusercontent.com/piorpiedev/JellyfinSpotlight/refs/heads/main/spotlight.css";
-    const jsHeadUrl = "https://raw.githubusercontent.com/piorpiedev/JellyfinSpotlight/refs/heads/main/spotlight-head.js";
-    const jsBodyUrl = "https://raw.githubusercontent.com/piorpiedev/JellyfinSpotlight/refs/heads/main/spotlight-body.js";
+    const htmlUrl = "spotlight.html";
+    const cssUrl = "spotlight.css";
+    const jsHeadUrl = "spotlight-head.js";
+    const jsBodyUrl = "spotlight-body.js";
 
     // Helper to Wait for the Home Library section to load
     const waitForElement = (selector) => {
@@ -28,7 +28,7 @@
         // Create the Iframe
         const iframe = document.createElement("iframe");
         iframe.id = "spotlight-iframe";
-        iframe.className = "spotlightiframe";
+        iframe.className = "spotlightiframe focusable emby-button";
         iframe.tabIndex = 0;
 
         // Position the iframe in the dashboard
@@ -41,6 +41,7 @@
             border: 0;
             margin: -8.5em auto -55px auto; 
             overflow: hidden;
+	    outline: none;
         `;
 
         // Insert iframe BEFORE the library list

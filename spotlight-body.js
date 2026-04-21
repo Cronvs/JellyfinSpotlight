@@ -1,4 +1,6 @@
 // Initialize global variables
+let isFirstLoad = true;
+let recentRetryCount = 0;
 let customTitle = '';
 let moviesSeriesBoth = 3, shuffleInterval = 10000, plotMaxLength = 600, useTrailers = true;
 let isChangingSlide = false, player = null, slideChangeTimeout = null, isHomePageActive = false, navigationInterval = null;
@@ -197,6 +199,11 @@ async function checkLocalTrailer(itemId) {
 
 // Create and display a new slide element for the given movie
 const createSlideElement = async (movie) => {
+    if (isFirstLoad) {
+        console.log("✅ Valid 'Recent' movie displayed. Switching to Random mode for next slides.");
+        isFirstLoad = false; 
+        recentRetryCount = 0;
+    }
     cleanup(); // Clean previous iframe
     
     // Note: We do NOT reset isHovering here. 
@@ -445,7 +452,42 @@ const fetchNextMovie = () => {
     // C. Cold Fetch
     const uid = fallbackUserId;
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
-    
+
+    if (isFirstLoad) {
+        if (recentRetryCount >= 15) {
+            console.log("⚠️ Too many recent items failed. Switching to random.");
+            isFirstLoad = false;
+            fetchNextMovie();
+            return;
+        }
+
+        const latestUrl = `${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`;
+
+        console.log(`🚀 Fast Load: Fetching 'Latest' endpoint (Attempt #${recentRetryCount})`);
+
+        fetch(latestUrl)
+            .then(r => r.json())
+            .then(dataArray => {
+                const candidate = dataArray[recentRetryCount];
+                if (candidate) {
+                    console.log(`Fetched candidate from Latest list: ${candidate.Name}`);
+                    recentRetryCount++; // Prepare for next attempt if this one fails validation
+                    validateAndLoad(candidate);
+                } else {
+                    console.warn("No more recent items found.");
+                    isFirstLoad = false;
+                    fetchNextMovie();
+                }
+            })
+            .catch(error => {
+                console.error("Error fetching latest:", error);
+                isFirstLoad = false;
+                setTimeout(fetchNextMovie, 2000);
+            });
+
+        return;
+    }
+
     // Added MinCommunityRating=4
     fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
         .then(r => r.json())

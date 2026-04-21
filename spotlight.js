@@ -41,7 +41,7 @@
             border: 0;
             margin: -8.5em auto -55px auto; 
             overflow: hidden;
-	    outline: none;
+            outline: none;
         `;
 
         // Insert iframe BEFORE the library list

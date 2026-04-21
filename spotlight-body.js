@@ -187,7 +187,7 @@ async function checkLocalTrailer(itemId) {
         const t = arr[0];
         const mediaSourceId = t.MediaSources?.[0]?.Id;
         const streamUrl = mediaSourceId
-            ? `${baseUrl}/Videos/${t.Id}/stream.mp4?mediaSourceId=${mediaSourceId}&api_key=${token}`
+            ? `${baseUrl}/Videos/${t.Id}/stream.mp4?Static=true&mediaSourceId=${mediaSourceId}&api_key=${token}`
             : null;
 
         return { trailer: t, streamUrl };
@@ -709,7 +709,7 @@ const attachButtonListeners = () => {
                 if (topMenu) topMenu.focus();
             }
         }
-	else if (e.keyCode === 10009) {
+        else if (e.keyCode === 10009) {
             if (window.parent) {
                 const parentDoc = window.parent.document;
 

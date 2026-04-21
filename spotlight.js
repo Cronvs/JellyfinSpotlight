@@ -28,7 +28,7 @@
         // Create the Iframe
         const iframe = document.createElement("iframe");
         iframe.id = "spotlight-iframe";
-        iframe.className = "spotlightiframe focusable emby-button";
+        iframe.className = "spotlightiframe";
         iframe.tabIndex = 0;
 
         // Position the iframe in the dashboard
@@ -41,7 +41,6 @@
             border: 0;
             margin: -8.5em auto -55px auto; 
             overflow: hidden;
-	    outline: none;
         `;
 
         // Insert iframe BEFORE the library list

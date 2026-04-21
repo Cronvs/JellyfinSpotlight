@@ -461,11 +461,9 @@ const fetchNextMovie = () => {
             return;
         }
 
-        const latestUrl = `${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`;
-
         console.log(`🚀 Fast Load: Fetching 'Latest' endpoint (Attempt #${recentRetryCount})`);
 
-        fetch(latestUrl)
+        fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
             .then(r => r.json())
             .then(dataArray => {
                 const candidate = dataArray[recentRetryCount];

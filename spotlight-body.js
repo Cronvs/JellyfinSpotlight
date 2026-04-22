@@ -16,6 +16,8 @@ let preloadedImage = null;
 let isHovering = false;
 let isFetching = false;
 let trailerHoverTimeout = null;
+let currentTrailerStarter = null;
+let listenersAttached = false;
 
 // Get User Auth token
 const getJellyfinAuth = () => {
@@ -148,6 +150,7 @@ const shutdown = () => {
     movieList = [];
     isHomePageActive = false;
     isChangingSlide = false;
+    listenersAttached = false;
 
     console.log("Slideshow has been completely shutdown");
 };
@@ -313,7 +316,10 @@ const createSlideElement = async (movie) => {
                     const v=document.getElementById('v');
                     v.volume=${globalVolume};
                     v.onended = () => parent.postMessage('local-trailer-ended', '*');
-                    window.addEventListener('message', e => { if(e.data==='toggle') v.paused?v.play():v.pause(); });
+                    window.addEventListener('message', e => {
+                        if(e.data==='toggle') { v.paused?v.play():v.pause(); }
+                        else if(e.data && e.data.type==='setVolume') { v.volume=e.data.value; }
+                    });
                 <\/script>`;
             videoContainer.appendChild(iframe);
             localTrailerIframe = iframe;
@@ -388,6 +394,8 @@ const createSlideElement = async (movie) => {
     window.currentSlideElement = newSlide;
     window.currentMovie = movie;
     updateSlideButtons();
+
+    isChangingSlide = false;
 };
 
 // Read a custom list of movie IDs from 'list.txt' and update the title
@@ -559,11 +567,18 @@ const preloadNextMovie = () => {
     if (!token || !uid) return;
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
     
-    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
+    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
         .then(r => r.json())
         .then(data => {
             if (data.Items?.[0]) {
                 const mov = data.Items[0];
+
+                // Manually double check filter logic bypasses
+                if ((mov.CommunityRating || 0) < 4) {
+                    preloadNextMovie();
+                    return;
+                }
+
                 // Validate Buffer
                 const imgBack = new Image();
                 const imgLogo = new Image();
@@ -628,7 +643,7 @@ const checkNavigation = () => {
     if (newLocation !== currentLocation) {
         currentLocation = newLocation;
 
-        if (isHomePagenewLocation) {
+        if (isHomePage) {
             if (!isHomePageActive) {
                 console.log("Returning to homepage, reactivating slideshow");
                 isHomePageActive = true;
@@ -668,14 +683,17 @@ const checkNavigation = () => {
 
 // Attach event listeners to navigation buttons
 const attachButtonListeners = () => {
+    if (listenersAttached) return; // Prevent duplicate listeners!
+    listenersAttached = true;
+
     const rightButton = document.getElementById('rightButton');
     const leftButton = document.getElementById('leftButton');
 
     if (rightButton && leftButton) {
         rightButton.onclick = fetchNextMovie;
         leftButton.onclick = navigatePrevious;
-        fetchNextMovie();
-        setTimeout(preloadNextMovie, 2000);
+        //fetchNextMovie();
+        //setTimeout(preloadNextMovie, 2000);
         console.log("Navigation button listeners attached.");
     }
 
@@ -687,6 +705,9 @@ const attachButtonListeners = () => {
             navigatePrevious();
         }
         else if (e.key === 'Enter') {
+            // Prevent double-firing if a button is already focused
+            if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+
             e.stopPropagation();
             if (window.currentMovie && window.currentMovie.Id) {
                 playMovie(window.currentMovie.Id);

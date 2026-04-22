@@ -1,9 +1,9 @@
 // Create an iframe and inject the Spotlight HTML/CSS
 (async function () {
-    const htmlUrl = "spotlight.html";
-    const cssUrl = "spotlight.css";
-    const jsHeadUrl = "spotlight-head.js";
-    const jsBodyUrl = "spotlight-body.js";
+    const htmlUrl = "/web/custom/ui/spotlight.html";
+    const cssUrl = "/web/custom/ui/spotlight.css";
+    const jsHeadUrl = "/web/custom/ui/spotlight-head.js";
+    const jsBodyUrl = "/web/custom/ui/spotlight-body.js";
 
     // Helper to Wait for the Home Library section to load
     const waitForElement = (selector) => {

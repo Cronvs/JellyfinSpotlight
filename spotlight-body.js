@@ -64,7 +64,6 @@ async function playMovie(itemId) {
             PlayCommand: 'PlayNow',
             ItemIds: [itemId],
             StartPositionTicks: 0,
-            MediaSourceId: itemId,
             ControllingUserId: client.getCurrentUserId() 
         });
     }
@@ -190,7 +189,7 @@ async function checkLocalTrailer(itemId) {
 const createSlideElement = async (movie) => {
     if (isFirstLoad) {
         console.log("✅ Valid 'Recent' movie displayed. Switching to Random mode for next slides.");
-        isFirstLoad = false; 
+        isFirstLoad = false;
         recentRetryCount = 0;
     }
     cleanup(); // Clean previous iframe

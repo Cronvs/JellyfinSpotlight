@@ -1,0 +1,24 @@
+{
+  "name": "jellyfinspotlight",
+  "version": "1.0.0",
+  "description": "**Spotlight** helps you rediscover your media by playing local or remote trailers fetched from your libraries' metadata — creating a living, evolving homepage slideshow that highlights your collection.",
+  "main": "spotlight.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/piorpiedev/JellyfinSpotlight.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/piorpiedev/JellyfinSpotlight/issues"
+  },
+  "homepage": "https://github.com/piorpiedev/JellyfinSpotlight#readme",
+  "dependencies": {
+    "clipboardy": "^5.0.1"
+  }
+}

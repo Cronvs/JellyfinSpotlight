@@ -77,6 +77,7 @@
 
                     sheet.insertRule(`
                         .${uniqueClass}:hover .cardImageContainer::after,
+                        .${uniqueClass}:focus-within .cardImageContainer::after,
                         .${uniqueClass}.show-animation:focus .cardImageContainer::after {
                             opacity: 1;
                             transform: scale(1.05);

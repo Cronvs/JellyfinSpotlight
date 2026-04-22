@@ -1,11 +1,8 @@
 // dynamic-hover.js
-// You shouldn't need to edit this file again.
 
 (function() {
-    // 1. Define where your config file lives relative to the web root
     const configScriptUrl = '/web/custom/ui/dyncard-config.js'; 
 
-    // 2. Function to dynamically inject and load the config file
     function loadConfig(url, callback) {
         const script = document.createElement('script');
         script.type = 'text/javascript';
@@ -13,7 +10,7 @@
 
         script.onload = () => {
             console.log('Dynamic Backgrounds: Config loaded successfully.');
-            callback(); // Run the main logic only after the config is ready
+            callback();
         };
 
         script.onerror = () => {
@@ -23,9 +20,7 @@
         document.head.appendChild(script);
     }
 
-    // 3. The main logic engine
     function initPlugin() {
-        // Double check the config exists
         if (!window.dynamicBackgrounds) {
             console.error("Dynamic Backgrounds: Config loaded, but window.dynamicBackgrounds is empty.");
             return;
@@ -39,10 +34,20 @@
             const cards = document.querySelectorAll('.card:not(.random-bg-applied)');
 
             cards.forEach(card => {
-                const id = card.getAttribute('data-id');
-                
-                if (id && window.dynamicBackgrounds[id]) {
-                    const pairs = window.dynamicBackgrounds[id];
+                // Find the image container inside the card
+                const imageContainer = card.querySelector('.cardImageContainer');
+
+                // If it doesn't exist, mark card as processed and skip
+                if (!imageContainer) {
+                    card.classList.add('random-bg-applied');
+                    return;
+                }
+
+                // Grab the aria-label (usually the media title)
+                const label = imageContainer.getAttribute('aria-label');
+
+                if (label && window.dynamicBackgrounds[label]) {
+                    const pairs = window.dynamicBackgrounds[label];
                     const randomPair = pairs[Math.floor(Math.random() * pairs.length)];
                     const uniqueClass = `dyn-hover-${Math.random().toString(36).substr(2, 9)}`;
                     const sheet = dynamicStyleBlock.sheet;
@@ -89,6 +94,5 @@
         observer.observe(document.body, { childList: true, subtree: true });
     }
 
-    // 4. Kick off the process
     loadConfig(configScriptUrl, initPlugin);
 })();

@@ -41,6 +41,7 @@
             border: 0;
             margin: -8.5em auto -55px auto; 
             overflow: hidden;
+            outline: none;
         `;
 
         // Insert iframe BEFORE the library list
@@ -52,18 +53,22 @@
             if (!htmlRes.ok || !cssRes.ok || !jsHeadRes.ok || !jsBodyRes.ok) throw new Error("Failed to load Spotlight files");
             let htmlContent = await htmlRes.text();
 
+            const headText = await jsHeadRes.text();
+            const bodyText = await jsBodyRes.text();
+            const cssText = await cssRes.text();
+
             htmlContent = htmlContent.replace(
                 `<script src="spotlight-head.js"></script>`,
-                `<script>${await jsHeadRes.text()}</script>`,
-            )
+                () => `<script>\n${headText}\n</script>`
+            );
             htmlContent = htmlContent.replace(
                 `<script src="spotlight-body.js"></script>`,
-                `<script>${await jsBodyRes.text()}</script>`,
-            )
+                () => `<script>\n${bodyText}\n</script>`
+            );
             htmlContent = htmlContent.replace(
                 `<link rel="stylesheet" href="spotlight.css">`,
-                `<style>${await cssRes.text()}</style>`,
-            )
+                () => `<style>\n${cssText}\n</style>`
+            );
 
             // Write to the Iframe (Same-Origin)
             // Writing to "about:blank" allows the iframe to access window.parent (your Jellyfin Auth)
@@ -79,14 +84,14 @@
         }
     };
 
-    // Run immediately and listen for navigation (Jellyfin is a Single Page App)
+    // Run immediately
     checkAndInject();
 
     // Re-run when internal navigation occurs
     const pushState = history.pushState;
     history.pushState = function () {
         pushState.apply(history, arguments);
-        setTimeout(checkAndInject, 500); // Small delay to let DOM settle
+        setTimeout(checkAndInject, 500);
     };
     window.addEventListener("popstate", () => setTimeout(checkAndInject, 500));
 })();

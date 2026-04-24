@@ -2,7 +2,7 @@
   "name": "jellyfinspotlight",
   "version": "1.0.0",
   "description": "**Spotlight** helps you rediscover your media by playing local or remote trailers fetched from your libraries' metadata — creating a living, evolving homepage slideshow that highlights your collection.",
-  "main": "injector.js",
+  "main": "spotlight.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },

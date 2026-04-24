@@ -5,19 +5,28 @@ let customTitle = '';
 let moviesSeriesBoth = 3, shuffleInterval = 10000, plotMaxLength = 600, useTrailers = true;
 let isChangingSlide = false, player = null, slideChangeTimeout = null, isHomePageActive = false, navigationInterval = null;
 let currentLocation = window.top.location.href;
-let movieList = [], currentMovieIndex = 0, lastMovie = null, currentMovie = null, currentSlideElement = null;
 let localTrailerIframe = null;
 let globalVolume = Number(localStorage.getItem('spotlightVolume') ?? 0.5);
 
 let historyList = [];       // Stores movie objects
 let historyIndex = -1;      // Points to current movie in history
-let preloadedMovie = null;
-let preloadedImage = null;
 let isHovering = false;
-let isFetching = false;
 let trailerHoverTimeout = null;
 let currentTrailerStarter = null;
 let listenersAttached = false;
+
+// --- Efficient Queueing System Variables ---
+let idQueue = [];
+let customListIds = [];
+let usingCustomList = false;
+let movieQueue = [];
+let seenItemIds = new Set();
+let isExhausted = false;
+let isPreloading = false;
+let isFetchingIds = false;
+let failedFetchCount = 0;
+let latestItemsCache = null;
+// -------------------------------------------
 
 // Get User Auth token
 const getJellyfinAuth = () => {
@@ -62,8 +71,51 @@ const getJellyfinAuth = () => {
     return { token, userId, serverUrl };
 };
 
-// Expose the new serverUrl variable
 const { token, userId: fallbackUserId, serverUrl: baseUrl } = getJellyfinAuth();
+
+// --- Session Storage Management ---
+const saveState = () => {
+    try {
+        sessionStorage.setItem('spotlightState', JSON.stringify({
+            idQueue,
+            customListIds,
+            usingCustomList,
+            seenItemIds: Array.from(seenItemIds),
+            isExhausted,
+            historyList,
+            historyIndex
+        }));
+    } catch (e) {
+        console.warn("Could not save Spotlight state to sessionStorage.", e);
+    }
+};
+
+const loadState = () => {
+    try {
+        const saved = sessionStorage.getItem('spotlightState');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if ((parsed.idQueue && parsed.idQueue.length > 0) || parsed.isExhausted) {
+                idQueue = parsed.idQueue || [];
+                customListIds = parsed.customListIds || [];
+                usingCustomList = parsed.usingCustomList || false;
+                seenItemIds = new Set(parsed.seenItemIds || []);
+                isExhausted = parsed.isExhausted || false;
+
+                historyList = parsed.historyList || [];
+                historyIndex = parsed.historyIndex !== undefined ? parsed.historyIndex : -1;
+
+                isFirstLoad = false;
+                console.log(`Spotlight state restored. ${idQueue.length} IDs in queue.`);
+                return true;
+            }
+        }
+    } catch (e) {
+        console.warn("Could not load Spotlight state from sessionStorage.", e);
+    }
+    return false;
+};
+// ----------------------------------
 
 async function playMovie(itemId) {
     const client = window.parent.ApiClient;
@@ -143,15 +195,16 @@ const shutdown = () => {
     document.getElementById('leftButton').onclick = null;
     const container = document.getElementById('slides-container');
     if (container) container.innerHTML = '';
-    currentMovie = null;
-    lastMovie = null;
-    currentMovieIndex = 0;
-    movieList = [];
     isHomePageActive = false;
     isChangingSlide = false;
     listenersAttached = false;
 
-    console.log("Slideshow has been completely shutdown");
+    saveState();
+
+    isPreloading = false;
+    isFetchingIds = false;
+
+    console.log("Slideshow has been safely paused");
 };
 
 const updateVolumeButtonVisibility = (show) => {
@@ -165,14 +218,26 @@ const updateVolumeButtonVisibility = (show) => {
 // Update the state of navigation buttons based on the current and last movie
 const updateSlideButtons = () => {
     const leftBtn = document.getElementById('leftButton');
+    const rightBtn = document.getElementById('rightButton');
+
     if (leftBtn) {
         const canGoBack = historyIndex > 0;
         leftBtn.disabled = !canGoBack;
-        leftBtn.removeAttribute('disabled'); // Fix browser ignore
-        
+        if (!canGoBack) leftBtn.setAttribute('disabled', 'true'); else leftBtn.removeAttribute('disabled');
+
         leftBtn.style.opacity = canGoBack ? '1' : '0.3';
         leftBtn.style.cursor = canGoBack ? 'pointer' : 'default';
         leftBtn.style.pointerEvents = canGoBack ? 'auto' : 'none';
+    }
+    if (rightBtn) {
+        const isAtEnd = isExhausted && historyIndex >= historyList.length - 1;
+        const canGoForward = !isAtEnd;
+        rightBtn.disabled = !canGoForward;
+        if (!canGoForward) rightBtn.setAttribute('disabled', 'true'); else rightBtn.removeAttribute('disabled');
+
+        rightBtn.style.opacity = canGoForward ? '1' : '0.3';
+        rightBtn.style.cursor = canGoForward ? 'pointer' : 'default';
+        rightBtn.style.pointerEvents = canGoForward ? 'auto' : 'none';
     }
 };
 
@@ -199,18 +264,17 @@ async function checkLocalTrailer(itemId) {
     }
 }
 
-// Create and display a new slide element for the given movie
 const createSlideElement = async (movie) => {
     if (isFirstLoad) {
-        console.log("✅ Valid 'Recent' movie displayed. Switching to Random mode for next slides.");
+        console.log("✅ Valid 'Recent' movie displayed. Switching to Random pool.");
         isFirstLoad = false;
         recentRetryCount = 0;
     }
     cleanup(); // Clean previous iframe
-    
-    // Note: We do NOT reset isHovering here. 
+
+    // Note: We do NOT reset isHovering here.
     // If the mouse is already there (e.g. clicked Next), we stay hovering.
-    
+
     updateVolumeButtonVisibility(false);
     if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
 
@@ -286,12 +350,10 @@ const createSlideElement = async (movie) => {
     textContainer.appendChild(btnContainer);
     newSlide.appendChild(textContainer);
 
-    // 3. Define Trailer Logic (But don't attach listeners to Slide anymore)
+    // 3. Define Trailer Logic
     const startTrailer = async () => {
         if (!useTrailers) return;
-        
-        // Wait for async check, then verify hover again
-        const localData = await checkLocalTrailer(movie.Id);
+        const localData = movie.localTrailerData;
         if (!isHovering) return; 
         if (newSlide.querySelector('.video-container')) return;
 
@@ -303,7 +365,7 @@ const createSlideElement = async (movie) => {
         let videoAdded = false;
 
         if (localData) {
-            const { trailer, streamUrl } = localData;
+            const { streamUrl } = localData;
             const iframe = document.createElement('iframe');
             iframe.className = 'local-trailer-frame';
             iframe.allow = 'autoplay';
@@ -360,7 +422,6 @@ const createSlideElement = async (movie) => {
                      if(isHovering) {
                          backdropImg.style.opacity = '0';
                          updateVolumeButtonVisibility(true);
-
                          const txt = newSlide.querySelector('.text-container');
                          if(txt) txt.classList.add('fade-out');
                      }
@@ -403,42 +464,168 @@ const readCustomList = () =>
         .then(response => response.ok ? response.text() : null)
         .then(text => {
             if (!text) return null;
-            const lines = text.split('\n').filter(Boolean);
-            customTitle = lines.shift() || customTitle;
-            // Not Using list titles for now    document.getElementById('titleHeading').textContent = customTitle;
-            return lines.map(line => line.trim().substring(0, 32));
+            const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length > 0 && lines[0].length !== 32) lines.shift();
+            return lines.map(line => line.substring(0, 32));
         })
         .catch(error => {
             console.error("Error reading custom list:", error);
             return null;
         });
 
-// Fetch a random movie or the next movie in the custom list
-const fetchRandomMovie = () => {
-    if (isChangingSlide) {
-        console.log("Slide change already in progress.");
-        return;
+// Top up idQueue so it is always 10-19 ahead of current progression
+async function fetchMoreIds() {
+    if (isFetchingIds || idQueue.length > 9 || isExhausted) return;
+    isFetchingIds = true;
+
+    try {
+        if (usingCustomList) {
+            let added = 0;
+            while (added < 10 && customListIds.length > 0) {
+                const id = customListIds.shift();
+                if (!seenItemIds.has(id)) {
+                    idQueue.push(id);
+                    added++;
+                }
+            }
+            if (added === 0 && customListIds.length === 0) isExhausted = true;
+        } else {
+            const uid = fallbackUserId;
+            const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
+
+            const res = await fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&SortBy=Random&Limit=10&Fields=Id&api_key=${token}&_t=${Date.now()}`);
+            const data = await res.json();
+
+            let added = 0;
+            for (let item of (data.Items || [])) {
+                if (!seenItemIds.has(item.Id) && !idQueue.includes(item.Id)) {
+                    idQueue.push(item.Id);
+                    added++;
+                }
+            }
+
+            // Exhaustion check
+            if (added === 0 && (data.Items || []).length > 0) {
+                failedFetchCount++;
+                if (failedFetchCount >= 5) {
+                    console.warn("No more new random movies found. Library exhausted.");
+                    isExhausted = true;
+                }
+            } else {
+                failedFetchCount = 0;
+            }
+        }
+        saveState();
+    } catch (e) {
+        console.error("Error fetching IDs:", e);
+    } finally {
+        isFetchingIds = false;
     }
+}
+
+// Wrapper to locally preload Image assets and validate
+const preloadImages = (movie) => {
+    return new Promise((resolve) => {
+        if ((movie.CommunityRating || 0) < 4) return resolve(false);
+
+        let backdropLoaded = false, logoLoaded = false, failed = false;
+        const checkDone = () => { if (!failed && backdropLoaded && logoLoaded) resolve(true); };
+
+        const imgBack = new Image();
+        imgBack.onload = () => { backdropLoaded = true; checkDone(); };
+        imgBack.onerror = () => { failed = true; resolve(false); };
+        imgBack.src = `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`;
+
+        const imgLogo = new Image();
+        imgLogo.onload = () => { logoLoaded = true; checkDone(); };
+        imgLogo.onerror = () => { failed = true; resolve(false); };
+        imgLogo.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
+    });
+};
+
+// Safe, single-threaded while loop replacing dangerous recursion
+async function preloadNextMovies() {
+    if (isPreloading) return;
+    isPreloading = true;
+
+    if (idQueue.length <= 9) await fetchMoreIds();
+
+    while (movieQueue.length < 2 && idQueue.length > 0) {
+        const nextId = idQueue.shift();
+
+        // Strict double-check: ensures an ID didn't sneak in before "Latest" was saved
+        if (seenItemIds.has(nextId)) continue;
+
+        const uid = fallbackUserId;
+        try {
+            const res = await fetch(`${baseUrl}/Users/${uid}/Items?Ids=${nextId}&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+            const data = await res.json();
+            const movie = data.Items && data.Items[0];
+
+            if (movie) {
+                seenItemIds.add(movie.Id);
+                saveState();
+
+                // Validate Assets
+                const validImages = await preloadImages(movie);
+                if (validImages) {
+                    movie.localTrailerData = await checkLocalTrailer(movie.Id);
+                    movieQueue.push(movie);
+                }
+            }
+        } catch (e) {
+            console.error("Error preloading movie:", e);
+        }
+
+        // If idQueue runs low inside the while loop, fetch more
+        if (idQueue.length === 0 && !isExhausted) {
+            await fetchMoreIds();
+        }
+    }
+
+    isPreloading = false;
+}
+
+const initOrResume = async () => {
+    if (isChangingSlide) return;
     isChangingSlide = true;
 
-    if (movieList.length === 0) {
-        readCustomList().then(list => {
-            if (list) {
-                movieList = list;
-                currentMovieIndex = 0;
-                console.log("Custom movie list loaded:", movieList);
+    // Restore state or establish first batch
+    if (idQueue.length === 0 && !isExhausted) {
+        if (!loadState()) {
+            try {
+                const cl = await readCustomList();
+                if (cl && cl.length > 0) {
+                    customListIds = cl;
+                    usingCustomList = true;
+                }
+                await fetchMoreIds();
+                saveState();
+            } catch (error) {
+                console.error("Error during initial queue setup:", error);
             }
-            fetchNextMovie();
-        }).catch(error => {
-            console.error("Error loading custom movie list:", error);
-            fetchNextMovie();
-        });
+        }
+    }
+
+    // If we have an active history from a restored session, resume it flawlessly
+    if (historyList.length > 0 && historyIndex >= 0) {
+        createSlideElement(historyList[historyIndex]);
+        preloadNextMovies(); // Replenish in background
     } else {
+        // Starting fresh
+        isChangingSlide = false;
         fetchNextMovie();
     }
 };
 
-const fetchNextMovie = () => {
+// Bound explicitly to Right Button navigation
+const fetchRandomMovie = async () => {
+    if (isChangingSlide) return;
+    isChangingSlide = true;
+    fetchNextMovie();
+};
+
+const fetchNextMovie = async () => {
     // A. Check History
     if (historyIndex < historyList.length - 1) {
         historyIndex++;
@@ -446,64 +633,77 @@ const fetchNextMovie = () => {
         return;
     }
 
-    // B. Check Buffer
-    if (preloadedMovie) {
-        addToHistory(preloadedMovie);
-        createSlideElement(preloadedMovie);
-        preloadedMovie = null;
-        preloadedImage = null;
-        preloadNextMovie();
-        return;
-    }
-
-    // C. Cold Fetch
     const uid = fallbackUserId;
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
 
+    // B. Fast First Load (Latest API)
     if (isFirstLoad) {
         if (recentRetryCount >= 15) {
-            console.log("⚠️ Too many recent items failed. Switching to random.");
+            console.log("⚠️ End of recent items buffer. Switching to random pool.");
             isFirstLoad = false;
-            fetchNextMovie();
+            return fetchNextMovie();
+        }
+
+        try {
+            if (!latestItemsCache) {
+                const r = await fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+                latestItemsCache = await r.json();
+            }
+
+            const candidate = latestItemsCache[recentRetryCount];
+            if (candidate) {
+                recentRetryCount++;
+                if (!seenItemIds.has(candidate.Id)) {
+                    seenItemIds.add(candidate.Id);
+                    saveState();
+
+                    const valid = await preloadImages(candidate);
+                    if (valid) {
+                        candidate.localTrailerData = await checkLocalTrailer(candidate.Id);
+                        addToHistory(candidate);
+                        createSlideElement(candidate);
+
+                        preloadNextMovies(); // Top up background buffer immediately
+                        return;
+                    }
+                }
+                return fetchNextMovie();
+            } else {
+                isFirstLoad = false;
+            }
+        } catch (error) {
+            console.error("Error fetching latest:", error);
+            isFirstLoad = false;
+        }
+    }
+
+    // C. Wait for Queue and Exhaustion State safely
+    if (movieQueue.length === 0) {
+        if (idQueue.length === 0 && isExhausted) {
+            console.warn("No more movies to show!");
+            isExhausted = true;
+            isChangingSlide = false;
+            saveState();
+            updateSlideButtons();
             return;
         }
 
-        console.log(`🚀 Fast Load: Fetching 'Latest' endpoint (Attempt #${recentRetryCount})`);
+        await preloadNextMovies();
 
-        fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
-            .then(r => r.json())
-            .then(dataArray => {
-                const candidate = dataArray[recentRetryCount];
-                if (candidate) {
-                    console.log(`Fetched candidate from Latest list: ${candidate.Name}`);
-                    recentRetryCount++; // Prepare for next attempt if this one fails validation
-                    validateAndLoad(candidate);
-                } else {
-                    console.warn("No more recent items found.");
-                    isFirstLoad = false;
-                    fetchNextMovie();
-                }
-            })
-            .catch(error => {
-                console.error("Error fetching latest:", error);
-                isFirstLoad = false;
-                setTimeout(fetchNextMovie, 2000);
-            });
-
-        return;
+        if (movieQueue.length === 0) {
+            console.error("Failed to preload any movies. Aborting to prevent lockup.");
+            isChangingSlide = false;
+            return;
+        }
     }
 
-    // Added MinCommunityRating=4
-    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
-        .then(r => r.json())
-        .then(d => { 
-            if (d.Items?.[0]) {
-                validateAndLoad(d.Items[0]);
-            } else {
-                console.error("No movies found with Rating >= 4.");
-            }
-        })
-        .catch(e => setTimeout(fetchNextMovie, 2000));
+    // D. Extract Preloaded Buffer
+    const candidate = movieQueue.shift();
+    addToHistory(candidate);
+    createSlideElement(candidate);
+
+    // E. Top up background
+    preloadNextMovies();
 };
 
 const navigatePrevious = () => {
@@ -512,94 +712,6 @@ const navigatePrevious = () => {
         console.log("History Back:", historyList[historyIndex].Name);
         createSlideElement(historyList[historyIndex]);
     }
-};
-
-const validateAndLoad = (movie) => {
-    // We need both to load successfully
-    let backdropLoaded = false;
-    let logoLoaded = false;
-    let failed = false;
-
-    const checkDone = () => {
-        if (failed) return; // Already skipped
-        if (backdropLoaded && logoLoaded) {
-            addToHistory(movie);
-            createSlideElement(movie);
-            preloadNextMovie(); 
-        }
-    };
-
-    // Sometimes Jellyfin decides to ignore filters when sorting by random...
-    if ((movie.CommunityRating || 0) < 4) {
-        console.warn(`Skipping "${movie.Name}" - Rating empty or below 4/10.`);
-        return;
-    }
-
-    // Check Backdrop
-    const imgBack = new Image();
-    imgBack.onload = () => { backdropLoaded = true; checkDone(); };
-    imgBack.onerror = () => { 
-        if (!failed) {
-            failed = true;
-            console.warn(`Skipping "${movie.Name}" - No Backdrop.`);
-            fetchNextMovie();
-        }
-    };
-    imgBack.src = `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`;
-
-    // Check Logo
-    const imgLogo = new Image();
-    imgLogo.onload = () => { logoLoaded = true; checkDone(); };
-    imgLogo.onerror = () => { 
-        if (!failed) {
-            failed = true;
-            console.warn(`Skipping "${movie.Name}" - No Logo.`);
-            fetchNextMovie();
-        }
-    };
-    imgLogo.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
-};
-
-// New Function: Fetch a movie silently in the background
-const preloadNextMovie = () => {
-    const uid = fallbackUserId;
-    if (!token || !uid) return;
-    const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
-    
-    fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&Limit=1&SortBy=random&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`)
-        .then(r => r.json())
-        .then(data => {
-            if (data.Items?.[0]) {
-                const mov = data.Items[0];
-
-                // Manually double check filter logic bypasses
-                if ((mov.CommunityRating || 0) < 4) {
-                    preloadNextMovie();
-                    return;
-                }
-
-                // Validate Buffer
-                const imgBack = new Image();
-                const imgLogo = new Image();
-                let bOk = false, lOk = false;
-
-                const tryCache = () => {
-                    if (bOk && lOk) {
-                        preloadedMovie = mov;
-                        preloadedImage = imgBack; 
-                        console.log("Buffered Next:", mov.Name);
-                    }
-                };
-
-                imgBack.onload = () => { bOk = true; tryCache(); };
-                imgBack.onerror = () => { console.log("Preload fail: No Backdrop", mov.Name); preloadNextMovie(); };
-                imgBack.src = `${baseUrl}/Items/${mov.Id}/Images/Backdrop/0`;
-
-                imgLogo.onload = () => { lOk = true; tryCache(); };
-                imgLogo.onerror = () => { console.log("Preload fail: No Logo", mov.Name); preloadNextMovie(); };
-                imgLogo.src = `${baseUrl}/Items/${mov.Id}/Images/Logo`;
-            }
-        });
 };
 
 const addToHistory = (movie) => {
@@ -614,7 +726,7 @@ const addToHistory = (movie) => {
         }
     } else {
         // Edge case: If user went back 5 times, then clicked "Random/Next" (not Forward),
-        // we usually branch off a new history. 
+        // we usually branch off a new history.
         // For simplicity here, we just wipe the forward history and append.
         historyList = historyList.slice(0, historyIndex + 1);
         historyList.push(movie);
@@ -622,15 +734,6 @@ const addToHistory = (movie) => {
     }
 };
 
-
-// Start a timer to change slides after a specified interval
-const startSlideChangeTimer = () => {
-    if (slideChangeTimeout) clearTimeout(slideChangeTimeout);
-    slideChangeTimeout = setTimeout(fetchNextMovie, shuffleInterval);
-    console.log("Slide change timer started.");
-};
-
-// Check if the user has navigated away from the homepage and handle slideshow accordingly
 const checkNavigation = () => {
     const newLocation = window.top.location.href;
     const isHomePage = newLocation.includes("/web/#/home.html") ||
@@ -647,7 +750,7 @@ const checkNavigation = () => {
                 console.log("Returning to homepage, reactivating slideshow");
                 isHomePageActive = true;
                 cleanup();
-                fetchRandomMovie();
+                initOrResume();
                 attachButtonListeners();
             }
             return
@@ -655,15 +758,6 @@ const checkNavigation = () => {
         if (isHomePageActive) {
             console.log("Leaving homepage, shutting down slideshow");
             shutdown();
-            // setTimeout(function () {
-            //     window.location.href = window.location.href;
-            //     cleanup();
-            //     /* This page reload is strangely critical to ensure
-            //     we don't double the script vars upon navigating home
-            //     using Jellyfin's home button. But it makes videos only
-            //     load on home not navback. Meh, lesser of two evils;
-            //     True SPA headache... */
-            // }, 500);
             return;
         }
         return;
@@ -674,7 +768,7 @@ const checkNavigation = () => {
         console.log("Returning to homepage, reactivating slideshow");
         isHomePageActive = true;
         cleanup();
-        fetchRandomMovie();
+        initOrResume();
         attachButtonListeners();
         return;
     }
@@ -682,31 +776,27 @@ const checkNavigation = () => {
 
 // Attach event listeners to navigation buttons
 const attachButtonListeners = () => {
-    if (listenersAttached) return; // Prevent duplicate listeners!
+    if (listenersAttached) return;
     listenersAttached = true;
 
     const rightButton = document.getElementById('rightButton');
     const leftButton = document.getElementById('leftButton');
 
     if (rightButton && leftButton) {
-        rightButton.onclick = fetchNextMovie;
+        rightButton.onclick = fetchRandomMovie; // Mapped to advance
         leftButton.onclick = navigatePrevious;
-        //fetchNextMovie();
-        //setTimeout(preloadNextMovie, 2000);
         console.log("Navigation button listeners attached.");
     }
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {
-            fetchNextMovie();
+            fetchRandomMovie();
         }
         else if (e.key === 'ArrowLeft') {
             navigatePrevious();
         }
         else if (e.key === 'Enter') {
-            // Prevent double-firing if a button is already focused
             if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
-
             e.stopPropagation();
             if (window.currentMovie && window.currentMovie.Id) {
                 playMovie(window.currentMovie.Id);
@@ -769,9 +859,8 @@ const attachButtonListeners = () => {
     document.body.addEventListener('mouseleave', () => {
         isHovering = false;
         if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
-        cleanup(); // Stop trailer
+        cleanup();
         updateVolumeButtonVisibility(false);
-        // Show backdrop again
         const backdrop = document.querySelector('.backdrop');
         if (backdrop) backdrop.style.opacity = '1';
     });
@@ -828,7 +917,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (isHomePage(window.top.location.href)) {
         isHomePageActive = true;
         cleanup();
-        fetchRandomMovie();
+        initOrResume();
         attachButtonListeners();
         initVolumeControl();
         console.log("Slideshow initialized on homepage.");

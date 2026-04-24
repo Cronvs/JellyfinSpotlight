@@ -480,7 +480,7 @@ async function fetchMoreIds() {
             const uid = fallbackUserId;
             const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
 
-            const res = await fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&SortBy=Random&Limit=10&Fields=Id&api_key=${token}&_t=${Date.now()}`);
+            const res = await fetch(`/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&SortBy=Random&Limit=10&Fields=Id&api_key=${token}&_t=${Date.now()}`);
             const data = await res.json();
 
             let added = 0;
@@ -521,12 +521,12 @@ const preloadImages = (movie) => {
         const imgBack = new Image();
         imgBack.onload = () => { backdropLoaded = true; checkDone(); };
         imgBack.onerror = () => { failed = true; resolve(false); };
-        imgBack.src = `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`;
+        imgBack.src = `/Items/${movie.Id}/Images/Backdrop/0`;
 
         const imgLogo = new Image();
         imgLogo.onload = () => { logoLoaded = true; checkDone(); };
         imgLogo.onerror = () => { failed = true; resolve(false); };
-        imgLogo.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
+        imgLogo.src = `/Items/${movie.Id}/Images/Logo`;
     });
 };
 
@@ -545,7 +545,7 @@ async function preloadNextMovies() {
 
         const uid = fallbackUserId;
         try {
-            const res = await fetch(`${baseUrl}/Users/${uid}/Items?Ids=${nextId}&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+            const res = await fetch(`/Users/${uid}/Items?Ids=${nextId}&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
             const data = await res.json();
             const movie = data.Items && data.Items[0];
 
@@ -633,7 +633,7 @@ const fetchNextMovie = async () => {
 
         try {
             if (!latestItemsCache) {
-                const r = await fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+                const r = await fetch(`/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
                 latestItemsCache = await r.json();
             }
 

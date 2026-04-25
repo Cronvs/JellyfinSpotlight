@@ -433,11 +433,11 @@ const createSlideElement = async (movie) => {
         old.classList.remove('visible');
         setTimeout(() => old.remove(), 1300);
     }
-    
+
     container.appendChild(newSlide);
     void newSlide.offsetWidth;
     newSlide.classList.add('visible');
-    
+
     window.currentSlideElement = newSlide;
     window.currentMovie = movie;
     updateSlideButtons();

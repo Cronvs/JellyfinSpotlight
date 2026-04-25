@@ -5,14 +5,19 @@
     const jsHeadUrl = "spotlight-head.js";
     const jsBodyUrl = "spotlight-body.js";
 
-    // Helper to Wait for the Home Library section to load
-    const waitForElement = (selector) => {
+    // Helper to wait for the ACTIVE (visible) Home Library section to load
+    const waitForVisibleElement = (selector) => {
         return new Promise(resolve => {
-            if (document.querySelector(selector)) return resolve(document.querySelector(selector));
+            // Find an element that is currently visible on screen (offsetParent !== null)
+            const getVisible = () => Array.from(document.querySelectorAll(selector)).find(el => el.offsetParent !== null);
+
+            if (getVisible()) return resolve(getVisible());
+
             const observer = new MutationObserver(() => {
-                if (document.querySelector(selector)) {
+                const visibleEl = getVisible();
+                if (visibleEl) {
                     observer.disconnect();
-                    resolve(document.querySelector(selector));
+                    resolve(visibleEl);
                 }
             });
             // Observe body for changes until our target appears
@@ -21,8 +26,21 @@
     };
 
     const checkAndInject = async () => {
-        const targetSection = await waitForElement(".section0"); // "section0" is usually the "My Media" library row
-        if (document.getElementById("spotlight-iframe")) return; // Prevent duplicate injection
+        // Wait specifically for the visible section0 in the active page view
+        const targetSection = await waitForVisibleElement(".section0");
+
+        const existingIframe = document.getElementById("spotlight-iframe");
+
+        if (existingIframe) {
+            // Check if the iframe is already properly injected above the visible section0
+            if (existingIframe.nextElementSibling === targetSection) {
+                return; // Everything is working, abort injection
+            } else {
+                // If it exists but is trapped in a hidden page cache, remove it so we can create a fresh one
+                existingIframe.remove();
+            }
+        }
+
         console.log("Spotlight: Injecting Interface...");
 
         // Create the Iframe
@@ -44,7 +62,7 @@
             outline: none;
         `;
 
-        // Insert iframe BEFORE the library list
+        // Insert iframe BEFORE the active library list
         targetSection.parentNode.insertBefore(iframe, targetSection);
 
         // Fetch and Write Content

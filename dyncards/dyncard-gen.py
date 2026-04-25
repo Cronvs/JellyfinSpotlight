@@ -32,7 +32,7 @@ for root, dirs, files in os.walk(BASE_IMAGE_DIR):
                 # Create the array for this title if it's the first time we've seen it
                 if title not in backgrounds:
                     backgrounds[title] = []
-                
+
                 # Calculate the relative path from the base directory
                 rel_dir = os.path.relpath(root, BASE_IMAGE_DIR)
 

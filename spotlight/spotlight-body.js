@@ -143,7 +143,7 @@ const loadState = () => {
         const saved = sessionStorage.getItem('spotlightState');
         if (saved) {
             const parsed = JSON.parse(saved);
-            if ((parsed.idQueue && parsed.idQueue.length > 0) || parsed.isExhausted) {
+            if (parsed.historyList && parsed.historyList.length > 0) {
                 idQueue = parsed.idQueue || [];
                 customListIds = parsed.customListIds || [];
                 usingCustomList = parsed.usingCustomList || false;
@@ -241,9 +241,11 @@ const shutdown = () => {
     document.getElementById('leftButton').onclick = null;
     const container = document.getElementById('slides-container');
     if (container) container.innerHTML = '';
+
+    window.currentSlideElement = null; // Clear dead DOM reference
     isHomePageActive = false;
     isChangingSlide = false;
-    listenersAttached = false;
+    // listenersAttached = false; <-- REMOVED to prevent duplicate input listeners
 
     saveState();
 
@@ -395,7 +397,7 @@ const createSlideElement = async (movie) => {
     const btnContainer = createElem('div', 'hero-buttons');
     const playBtn = createElem('button', 'btn-hero btn-play');
     playBtn.innerHTML = '<span class="material-icons">play_arrow</span> Play';
-    playBtn.onclick = (e) => { 
+    playBtn.onclick = (e) => {
         e.stopPropagation();
         playMovie(movie.Id);
     };
@@ -923,27 +925,18 @@ const attachButtonListeners = () => {
         else if (e.key === 'ArrowDown') {
             // Escape iframe: Push focus down to the first media card in Jellyfin
             if (window.parent) {
-                const section0 = window.parent.document.querySelector('.section0');
-                // Target the native focusable anchor tag inside Jellyfin's first card
-                const firstFocusable = section0 ? section0.querySelector('.card a.itemAction, .card button.itemAction') : null;
-                if (firstFocusable) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    window.parent.focus(); // Release iframe trap
-                    firstFocusable.focus(); // Inject focus into native UI
-                }
+                // FIXED DOM CACHE VISIBILITY FOR ARROWDOWN
+                const sections = Array.from(window.parent.document.querySelectorAll('.section0'));
+                const visibleSection = sections.find(el => el.offsetParent !== null);
+                const nextCard = visibleSection ? visibleSection.querySelector('.card, .itemAction, .emby-button') : null;
+                if (nextCard) nextCard.focus();
             }
         }
         else if (e.key === 'ArrowUp') {
             // Escape iframe: Push focus up to the Jellyfin top menu header
             if (window.parent) {
                 const topMenu = window.parent.document.querySelector('.headerTabs .emby-tab-button[data-index="0"]');
-                if (topMenu) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    window.parent.focus(); // Release iframe trap
-                    topMenu.focus(); // Inject focus into native UI
-                }
+                if (topMenu) topMenu.focus();
             }
         }
         else if (e.key === 'VolumeMute' || e.keyCode === 449 || e.keyCode === 173) {

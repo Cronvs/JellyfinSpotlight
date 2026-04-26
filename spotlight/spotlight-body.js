@@ -915,11 +915,11 @@ const attachButtonListeners = () => {
 
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {
-		fetchRandomMovie();
-	}
+            fetchRandomMovie();
+        }
         else if (e.key === 'ArrowLeft') {
-		navigatePrevious();
-	}
+            navigatePrevious();
+        }
         else if (e.key === 'ArrowDown') {
             // Escape iframe: Push focus down to the first media card in Jellyfin
             if (window.parent) {

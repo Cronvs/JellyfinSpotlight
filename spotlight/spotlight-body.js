@@ -105,8 +105,7 @@ window.toggleTrailer = () => {
             if (txt) txt.classList.remove('fade-out');
         }
     } else if (player && typeof player.getPlayerState === 'function') {
-        const state = player.getPlayerState();
-        if (state === 1) {
+        if (player.getPlayerState() === 1) {
             player.pauseVideo();
             if (visualWrapper) visualWrapper.style.opacity = '1';
             if (txt) txt.classList.remove('fade-out');
@@ -229,8 +228,9 @@ const cleanup = () => {
         trailerHoverTimeout = null;
         console.log("Slide change timeout cleared.");
     }
-    const txt = document.querySelector('.text-container');
-    if (txt) txt.classList.remove('fade-out');
+
+    document.querySelectorAll('.visual-wrapper').forEach(vw => vw.style.opacity = '1');
+    document.querySelectorAll('.text-container').forEach(txt => txt.classList.remove('fade-out'));
 };
 
 // Shut down the slideshow by cleaning up and resetting variables
@@ -239,13 +239,9 @@ const shutdown = () => {
     cleanup();
     document.getElementById('rightButton').onclick = null;
     document.getElementById('leftButton').onclick = null;
-    const container = document.getElementById('slides-container');
-    if (container) container.innerHTML = '';
 
-    window.currentSlideElement = null; // Clear dead DOM reference
     isHomePageActive = false;
     isChangingSlide = false;
-    // listenersAttached = false; <-- REMOVED to prevent duplicate input listeners
 
     saveState();
 
@@ -369,7 +365,7 @@ const createSlideElement = async (movie) => {
 
     const textContainer = createElem('div', 'text-container');
     const logoImg = new Image();
-    logoImg.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
+
     logoImg.onload = () => textContainer.prepend(createElem('img', 'logo', null, logoImg.src, 'logo'));
     logoImg.onerror = () => {
         const titleEl = document.createElement('h1');
@@ -377,6 +373,7 @@ const createSlideElement = async (movie) => {
         titleEl.textContent = movie.Name;
         textContainer.prepend(titleEl);
     };
+    logoImg.src = `${baseUrl}/Items/${movie.Id}/Images/Logo`;
 
     const year = movie.PremiereDate ? new Date(movie.PremiereDate).getFullYear() : '';
     const genres = movie.Genres ? movie.Genres.slice(0, 2).join(', ') : '';
@@ -439,12 +436,12 @@ const createSlideElement = async (movie) => {
                 video.style.transition = 'opacity 1s ease';
                 video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true');
 
-                // STRETCH WIDTH TO KILL LETTERBOXING. Push up 20% to keep top borders hidden.
+                // Standard 100% fit (No zoom/overfill)
                 video.style.cssText = `
                     position: absolute !important;
-                    top: -20% !important; left: -7.5% !important; right: auto !important;
-                    width: 115% !important;
-                    height: calc(120% - 55px) !important;
+                    top: 0 !important; left: 0 !important; right: auto !important;
+                    width: 100% !important;
+                    height: calc(100% - 55px) !important;
                     object-fit: cover !important; object-position: center !important;
                     z-index: 0 !important; background: transparent !important; pointer-events: none !important;
                 `;
@@ -717,6 +714,14 @@ const initOrResume = async () => {
         }
     }
 
+    const container = document.getElementById('slides-container');
+    if (window.currentSlideElement && container && container.contains(window.currentSlideElement)) {
+        updateSlideButtons();
+        isChangingSlide = false;
+        preloadNextMovies();
+        return;
+    }
+
     // If we have an active history from a restored session, resume it flawlessly
     if (historyList.length > 0 && historyIndex >= 0) {
         createSlideElement(historyList[historyIndex]);
@@ -840,6 +845,25 @@ const addToHistory = (movie) => {
     }
 };
 
+const waitForVisibilityAndResume = () => {
+    attachButtonListeners();
+
+    let attempts = 0;
+    const check = () => {
+        attempts++;
+        const wrapper = window.parent.document.getElementById('spotlight-wrapper-tizen');
+
+        if ((wrapper && wrapper.offsetParent !== null) || attempts > 60) {
+            setTimeout(() => {
+                initOrResume();
+            }, 50);
+        } else {
+            requestAnimationFrame(check);
+        }
+    };
+    requestAnimationFrame(check);
+};
+
 const checkNavigation = () => {
     const newLocation = window.top.location.href;
     const isHomePage = newLocation.includes("/web/#/home.html") ||
@@ -856,8 +880,7 @@ const checkNavigation = () => {
                 console.log("Returning to homepage, reactivating slideshow");
                 isHomePageActive = true;
                 cleanup();
-                initOrResume();
-                attachButtonListeners();
+                waitForVisibilityAndResume();
             }
             return;
         }
@@ -874,8 +897,7 @@ const checkNavigation = () => {
         console.log("Returning to homepage, reactivating slideshow");
         isHomePageActive = true;
         cleanup();
-        initOrResume();
-        attachButtonListeners();
+        waitForVisibilityAndResume();
         return;
     }
 };
@@ -907,8 +929,6 @@ const attachButtonListeners = () => {
         if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
         cleanup();
         updateVolumeButtonVisibility(false);
-        const vw = document.querySelector('.visual-wrapper');
-        if (vw) vw.style.opacity = '1';
     });
 
     document.body.addEventListener('mouseenter', () => { window.focus(); });

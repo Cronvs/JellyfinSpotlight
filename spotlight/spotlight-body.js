@@ -165,19 +165,55 @@ const loadState = () => {
 
 async function playMovie(itemId) {
     const client = window.parent.ApiClient;
-    const deviceId = client.deviceId();
-    const sessions = await client.getSessions();
-    const mySessions = sessions.filter(s => s.DeviceId === deviceId);
-    mySessions.sort((a,b) => new Date(b.LastActivityDate) - new Date(a.LastActivityDate))
 
+    // 1. The "Wake-Up" Ping
+    // Make a lightweight, silent API call to force the server to update our LastActivityDate.
+    // This ensures our session isn't marked as "dead" before we query the active session list.
+    try {
+        await client.getCurrentUser();
+    } catch (e) { }
+
+    const deviceId = client.deviceId();
+    const userId = client.getCurrentUserId();
+    const appName = typeof client.appName === 'function' ? client.appName() : 'Jellyfin Web';
+
+    const sessions = await client.getSessions();
+
+    // 2. Fuzzy Session Matching
+    // Tizen and WebKit engines sometimes scramble/lose their deviceId on wake from sleep.
+    // First, try the exact Device ID match:
+    let mySessions = sessions.filter(s => s.DeviceId === deviceId);
+
+    // If exact match fails, fallback to the most recent session for THIS user on THIS app type:
+    if (mySessions.length === 0) {
+        console.log("Spotlight: Exact DeviceId not found. Falling back to fuzzy session matching...");
+        mySessions = sessions.filter(s =>
+            s.UserId === userId &&
+            s.Client && (s.Client === appName || s.Client.toLowerCase().includes('tizen') || s.Client.toLowerCase().includes('web'))
+        );
+    }
+
+    mySessions.sort((a, b) => new Date(b.LastActivityDate) - new Date(a.LastActivityDate));
     const mySession = mySessions[0];
+
     if (mySession) {
-        await client.sendPlayCommand(mySession.Id, {
-            PlayCommand: 'PlayNow',
-            ItemIds: [itemId],
-            StartPositionTicks: 0,
-            ControllingUserId: client.getCurrentUserId()
-        });
+        console.log("Spotlight: Dispatching Play command via ApiClient to session:", mySession.Id);
+        try {
+            // 3. Send the command to the verified session
+            await client.sendPlayCommand(mySession.Id, {
+                PlayCommand: 'PlayNow',
+                ItemIds: [itemId],
+                StartPositionTicks: 0,
+                ControllingUserId: userId
+            });
+        } catch (err) {
+            console.error("Spotlight: sendPlayCommand failed", err);
+        }
+    } else {
+        console.warn("Spotlight: API Client could not find a valid session. WebSocket may be disconnected.");
+        // Ultimate Safety Net: If the background socket is completely dead and the session is lost,
+        // we bypass the API and use the SPA router so the button click still does something useful.
+        window.parent.location.hash = '#/details?id=' + itemId;
     }
 }
 

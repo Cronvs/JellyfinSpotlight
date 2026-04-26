@@ -6,6 +6,11 @@
    ================================================ */
 
 /* Base Reset */
+html, body, #slides-container, .slide-mat {
+    background: transparent !important;
+    background-color: transparent !important;
+}
+
 body {
   margin: 0;
   padding: 0;
@@ -113,7 +118,7 @@ body {
   width: 100%;
   height: 100%;
   z-index: 0;
-  transform: scale(1.1);
+  background: transparent !important;
   /* Zooming it a bit to remove the title */
 }
 

@@ -8,14 +8,14 @@ let currentLocation = window.top.location.href;
 let localTrailerIframe = null;
 let globalVolume = Number(localStorage.getItem('spotlightVolume') ?? 0.5);
 
-let historyList = [];       // Stores movie objects
-let historyIndex = -1;      // Points to current movie in history
+let historyList = [];
+let historyIndex = -1;
 let isHovering = false;
 let trailerHoverTimeout = null;
 let currentTrailerStarter = null;
 let listenersAttached = false;
 
-// --- Efficient Queueing System Variables ---
+// Efficient Queueing System Variables
 let idQueue = [];
 let customListIds = [];
 let usingCustomList = false;
@@ -26,19 +26,11 @@ let isPreloading = false;
 let isFetchingIds = false;
 let failedFetchCount = 0;
 let latestItemsCache = null;
-// -------------------------------------------
 
 // Get User Auth token
 const getJellyfinAuth = () => {
-    let token = null;
-    let userId = null;
-    let serverUrl = '';
-
-    // Extract Server URL via ApiClient
-    if (window.parent && window.parent.ApiClient) {
-        serverUrl = window.parent.ApiClient.serverAddress();
-    }
-
+    let token = null; let userId = null; let serverUrl = '';
+    if (window.parent && window.parent.ApiClient) serverUrl = window.parent.ApiClient.serverAddress();
     const initEl = window.parent.document.getElementById('jellyfin-initialization-data');
     if (initEl) {
         try {
@@ -73,7 +65,6 @@ const getJellyfinAuth = () => {
 
 const { token, userId: fallbackUserId, serverUrl: baseUrl } = getJellyfinAuth();
 
-// --- Session Storage Management ---
 const saveState = () => {
     try {
         sessionStorage.setItem('spotlightState', JSON.stringify({
@@ -88,6 +79,63 @@ const saveState = () => {
     } catch (e) {
         console.warn("Could not save Spotlight state to sessionStorage.", e);
     }
+};
+
+// --- Universal Play/Pause Trailer Toggle ---
+window.toggleTrailer = () => {
+    const parentDoc = window.parent.document;
+    const localVideo = parentDoc.getElementById('tizen-hardware-video');
+    const matteOverlay = parentDoc.getElementById('tizen-matte-overlay');
+    const slide = window.currentSlideElement;
+    const visualWrapper = slide ? slide.querySelector('.visual-wrapper') : null;
+    const txt = slide ? slide.querySelector('.text-container') : null;
+
+    if (localVideo) {
+        if (localVideo.paused) {
+            localVideo.play();
+            localVideo.style.opacity = '1';
+            if (matteOverlay) matteOverlay.style.opacity = '1';
+            if (visualWrapper) visualWrapper.style.opacity = '0';
+            if (txt) txt.classList.add('fade-out');
+        } else {
+            localVideo.pause();
+            localVideo.style.opacity = '0';
+            if (matteOverlay) matteOverlay.style.opacity = '0';
+            if (visualWrapper) visualWrapper.style.opacity = '1';
+            if (txt) txt.classList.remove('fade-out');
+        }
+    } else if (player && typeof player.getPlayerState === 'function') {
+        const state = player.getPlayerState();
+        if (state === 1) {
+            player.pauseVideo();
+            if (visualWrapper) visualWrapper.style.opacity = '1';
+            if (txt) txt.classList.remove('fade-out');
+        } else {
+            player.playVideo();
+            if (visualWrapper) visualWrapper.style.opacity = '0';
+            if (txt) txt.classList.add('fade-out');
+        }
+    }
+};
+
+// --- Tizen Hardware Key Reg/Unreg ---
+function toggleTizenMediaKeys(enable) {
+    try {
+        const tizenApi = window.tizen || (window.parent && window.parent.tizen);
+        if (tizenApi && tizenApi.tvinputdevice) {
+            if (enable) {
+                tizenApi.tvinputdevice.registerKey('VolumeMute');
+                tizenApi.tvinputdevice.registerKey('MediaPlay');
+                tizenApi.tvinputdevice.registerKey('MediaPause');
+                tizenApi.tvinputdevice.registerKey('MediaPlayPause');
+            } else {
+                tizenApi.tvinputdevice.unregisterKey('VolumeMute');
+                tizenApi.tvinputdevice.unregisterKey('MediaPlay');
+                tizenApi.tvinputdevice.unregisterKey('MediaPause');
+                tizenApi.tvinputdevice.unregisterKey('MediaPlayPause');
+            }
+        }
+    } catch (e) {}
 };
 
 const loadState = () => {
@@ -115,7 +163,6 @@ const loadState = () => {
     }
     return false;
 };
-// ----------------------------------
 
 async function playMovie(itemId) {
     const client = window.parent.ApiClient;
@@ -130,7 +177,7 @@ async function playMovie(itemId) {
             PlayCommand: 'PlayNow',
             ItemIds: [itemId],
             StartPositionTicks: 0,
-            ControllingUserId: client.getCurrentUserId() 
+            ControllingUserId: client.getCurrentUserId()
         });
     }
 }
@@ -171,7 +218,7 @@ const cleanup = () => {
         localTrailerIframe = null;
         console.log("Local trailer iframe removed.");
     }
-    document.querySelectorAll(".video-container").forEach(e => e.remove())
+    document.querySelectorAll(".video-container").forEach(e => e.remove());
     if (slideChangeTimeout) {
         clearTimeout(slideChangeTimeout);
         slideChangeTimeout = null;
@@ -182,7 +229,6 @@ const cleanup = () => {
         trailerHoverTimeout = null;
         console.log("Slide change timeout cleared.");
     }
-
     const txt = document.querySelector('.text-container');
     if (txt) txt.classList.remove('fade-out');
 };
@@ -250,13 +296,9 @@ async function checkLocalTrailer(itemId) {
         if (!res.ok) return null;
         const arr = await res.json();
         if (!arr?.length) return null;
-
         const t = arr[0];
         const mediaSourceId = t.MediaSources?.[0]?.Id;
-        const streamUrl = mediaSourceId
-            ? `${baseUrl}/Videos/${t.Id}/stream.mp4?Static=true&mediaSourceId=${mediaSourceId}&api_key=${token}`
-            : null;
-
+        const streamUrl = mediaSourceId ? `${baseUrl}/Videos/${t.Id}/stream.mp4?Static=true&mediaSourceId=${mediaSourceId}&api_key=${token}` : null;
         return { trailer: t, streamUrl };
     } catch (e) {
         console.warn("Local trailer check failed:", e);
@@ -278,11 +320,30 @@ const createSlideElement = async (movie) => {
     updateVolumeButtonVisibility(false);
     if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
 
+    const parentDoc = window.parent.document;
     const container = document.getElementById('slides-container');
     const newSlide = createElem('div', 'slide');
 
     // 1. Visuals
+    // Robust RGB parser for clean opacity transitions
+    let r = 16, g = 16, b = 16;
+    try {
+        const themeElement = parentDoc.querySelector('.backgroundContainer') || parentDoc.body;
+        const computed = window.getComputedStyle(themeElement).backgroundColor;
+        const match = computed.match(/\d+/g);
+        if (match && match.length >= 3) {
+            r = match[0]; g = match[1]; b = match[2];
+        }
+    } catch(e) {}
+    const rgb = `${r}, ${g}, ${b}`;
+
     const visualWrapper = createElem('div', 'visual-wrapper');
+    visualWrapper.style.transition = 'opacity 1.5s ease-in-out';
+
+    const shadowStyle = document.createElement('style');
+    shadowStyle.innerHTML = `.visual-wrapper::after { left: 0 !important; width: 100% !important; background: linear-gradient(to right, rgba(${rgb}, 1) 0%, rgba(${rgb}, 1) 10%, rgba(${rgb}, 0.6) 40%, rgba(${rgb}, 0) 100%) !important; }`;
+    visualWrapper.appendChild(shadowStyle);
+
     const backdropImg = createElem('img', 'backdrop', null, `${baseUrl}/Items/${movie.Id}/Images/Backdrop/0`, 'backdrop');
     visualWrapper.appendChild(backdropImg);
     newSlide.appendChild(visualWrapper);
@@ -338,11 +399,12 @@ const createSlideElement = async (movie) => {
         e.stopPropagation();
         playMovie(movie.Id);
     };
+
     const infoBtn = createElem('button', 'btn-hero btn-info');
     infoBtn.innerHTML = '<span class="material-icons">info_outline</span> More Info';
-    infoBtn.onclick = (e) => { 
-        e.stopPropagation(); 
-        window.top.Emby.Page.showItem(movie.Id); 
+    infoBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.parent.location.hash = '#/details?id=' + movie.Id;
     };
     
     btnContainer.appendChild(playBtn);
@@ -366,61 +428,109 @@ const createSlideElement = async (movie) => {
 
         if (localData) {
             const { streamUrl } = localData;
-            const iframe = document.createElement('iframe');
-            iframe.className = 'local-trailer-frame';
-            iframe.allow = 'autoplay';
-            iframe.style.border = '0';
-            iframe.srcdoc = `
-                <style>body{margin:0;background:#000;overflow:hidden;}video{width:100%;height:100%;object-fit:cover;}</style>
-                <video id="v" autoplay src="${streamUrl}"></video>
-                <script>
-                    const v=document.getElementById('v');
-                    v.volume=${globalVolume};
-                    v.onended = () => parent.postMessage('local-trailer-ended', '*');
-                    window.addEventListener('message', e => {
-                        if(e.data==='toggle') { v.paused?v.play():v.pause(); }
-                        else if(e.data && e.data.type==='setVolume') { v.volume=e.data.value; }
-                    });
-                <\/script>`;
-            videoContainer.appendChild(iframe);
-            localTrailerIframe = iframe;
-            clickOverlay.onclick = () => iframe.contentWindow.postMessage('toggle', '*');
-            videoAdded = true;
-        } else if (movie.RemoteTrailers?.length > 0 && window.YT) {
-            const trailerUrl = movie.RemoteTrailers[0].Url;
-            const videoId = trailerUrl.match(/[?&]v=([^&]+)/)?.[1];
-            if (videoId) {
-                const vidDiv = createElem('div', 'video-player');
-                videoContainer.appendChild(vidDiv);
+            const wrapper = parentDoc.getElementById('spotlight-wrapper-tizen');
 
-                player = new YT.Player(vidDiv, {
-                    height: '100%', width: '100%', videoId: videoId,
-                    playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3, 'disablekb': 1, 'fs': 0, 'playsinline': 1 },
-                    events: {
-                        'onReady': (e) => {
-                            if(!isHovering) { cleanup(); return; }
-                            e.target.setVolume(globalVolume * 100);
-                            backdropImg.style.opacity = '0';
-                            updateVolumeButtonVisibility(true);
-                            const txt = newSlide.querySelector('.text-container');
-                            if(txt) txt.classList.add('fade-out');
-                        },
-                        'onStateChange': (e) => {
-                            if (e.data === YT.PlayerState.ENDED) { backdropImg.style.opacity = '1'; cleanup(); }
-                        }
+            if (wrapper) {
+                const video = parentDoc.createElement('video');
+                video.id = 'tizen-hardware-video'; video.autoplay = true;
+                video.src = streamUrl;
+                video.style.transition = 'opacity 1s ease';
+                video.setAttribute('playsinline', 'true'); video.setAttribute('webkit-playsinline', 'true');
+
+                // STRETCH WIDTH TO KILL LETTERBOXING. Push up 20% to keep top borders hidden.
+                video.style.cssText = `
+                    position: absolute !important;
+                    top: -20% !important; left: -7.5% !important; right: auto !important;
+                    width: 115% !important;
+                    height: calc(120% - 55px) !important;
+                    object-fit: cover !important; object-position: center !important;
+                    z-index: 0 !important; background: transparent !important; pointer-events: none !important;
+                `;
+
+                // LOWER OPACITY CURVE: Hard 1.0 at 0%, fast dropoff to soft transparency.
+                const matteOverlay = parentDoc.createElement('div');
+                matteOverlay.id = 'tizen-matte-overlay';
+                matteOverlay.style.transition = 'opacity 1s ease';
+                matteOverlay.style.cssText = `
+                    position: absolute; left: -20px; right: -20px;
+                    bottom: 55px; height: 80px;
+                    z-index: 1; pointer-events: none;
+                    background: linear-gradient(to top,
+                        rgba(${rgb}, 1) 0%,
+                        rgba(${rgb}, 0.8) 15%,
+                        rgba(${rgb}, 0.4) 45%,
+                        rgba(${rgb}, 0.15) 75%,
+                        rgba(${rgb}, 0) 100%);
+                `;
+
+                parentDoc.body.classList.add('transparentDocument');
+                const bgElements = parentDoc.querySelectorAll('.backgroundContainer, .backdropContainer');
+                bgElements.forEach(el => el.style.opacity = '0');
+
+                video.onended = () => { fetchRandomMovie(); };
+
+                const iframeRef = parentDoc.getElementById('spotlight-iframe');
+                if (iframeRef) {
+                    wrapper.insertBefore(video, iframeRef);
+                    wrapper.insertBefore(matteOverlay, iframeRef);
+                } else {
+                    wrapper.appendChild(video); wrapper.appendChild(matteOverlay);
+                }
+
+                localTrailerIframe = {
+                    remove: () => {
+                        video.remove();
+                        if (matteOverlay) matteOverlay.remove();
+                        if (visualWrapper) visualWrapper.style.opacity = '1';
+                        const txt = newSlide.querySelector('.text-container');
+                        if (txt) txt.classList.remove('fade-out');
+                        parentDoc.body.classList.remove('transparentDocument');
+                        bgElements.forEach(el => el.style.opacity = '');
                     }
-                });
-                clickOverlay.onclick = () => player.getPlayerState() === 1 ? player.pauseVideo() : player.playVideo();
+                };
+
+                clickOverlay.onclick = (e) => { e.stopPropagation(); window.toggleTrailer(); };
                 videoAdded = true;
             }
-        }
+        }// else if (movie.RemoteTrailers?.length > 0 && window.YT) {
+        //    const trailerUrl = movie.RemoteTrailers[0].Url;
+        //    const videoId = trailerUrl.match(/[?&]v=([^&]+)/)?.[1];
+        //    if (videoId) {
+        //        const vidDiv = createElem('div', 'video-player');
+        //        videoContainer.appendChild(vidDiv);
+
+        //        player = new YT.Player(vidDiv, {
+        //            height: '100%', width: '100%', videoId: videoId,
+        //            playerVars: { 'autoplay': 1, 'controls': 0, 'modestbranding': 1, 'rel': 0, 'iv_load_policy': 3, 'disablekb': 1, 'fs': 0, 'playsinline': 1 },
+        //            events: {
+        //                'onReady': (e) => {
+        //                    if(!isHovering) { cleanup(); return; }
+        //                    visualWrapper.style.opacity = '0';
+        //                    updateVolumeButtonVisibility(true);
+        //                    const txt = newSlide.querySelector('.text-container');
+        //                    if(txt) txt.classList.add('fade-out');
+        //                },
+        //                'onStateChange': (e) => {
+        //                    if (e.data === YT.PlayerState.ENDED) {
+        //                        visualWrapper.style.opacity = '1';
+        //                        const txt = newSlide.querySelector('.text-container');
+        //                        if (txt) txt.classList.remove('fade-out');
+        //                        cleanup();
+        //                    }
+        //                }
+        //            }
+        //        });
+        //        clickOverlay.onclick = (e) => { e.stopPropagation(); window.toggleTrailer(); };
+        //        videoAdded = true;
+        //    }
+        //}
 
         if (videoAdded) {
             newSlide.appendChild(videoContainer);
             if (localData) {
                  setTimeout(() => { 
                      if(isHovering) {
-                         backdropImg.style.opacity = '0';
+                         visualWrapper.style.opacity = '0';
                          updateVolumeButtonVisibility(true);
                          const txt = newSlide.querySelector('.text-container');
                          if(txt) txt.classList.add('fade-out');
@@ -460,8 +570,7 @@ const createSlideElement = async (movie) => {
 
 // Read a custom list of movie IDs from 'list.txt' and update the title
 const readCustomList = () =>
-    fetch('list.txt?' + new Date().getTime())
-        .then(response => response.ok ? response.text() : null)
+    fetch('list.txt?' + new Date().getTime()).then(response => response.ok ? response.text() : null)
         .then(text => {
             if (!text) return null;
             const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
@@ -477,7 +586,6 @@ const readCustomList = () =>
 async function fetchMoreIds() {
     if (isFetchingIds || idQueue.length > 9 || isExhausted) return;
     isFetchingIds = true;
-
     try {
         if (usingCustomList) {
             let added = 0;
@@ -618,7 +726,6 @@ const initOrResume = async () => {
     }
 };
 
-// Bound explicitly to Right Button navigation
 const fetchRandomMovie = async () => {
     if (isChangingSlide) return;
     isChangingSlide = true;
@@ -632,7 +739,6 @@ const fetchNextMovie = async () => {
         createSlideElement(historyList[historyIndex]);
         return;
     }
-
     const uid = fallbackUserId;
     const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
 
@@ -643,7 +749,6 @@ const fetchNextMovie = async () => {
             isFirstLoad = false;
             return fetchNextMovie();
         }
-
         try {
             if (!latestItemsCache) {
                 const r = await fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
@@ -656,7 +761,6 @@ const fetchNextMovie = async () => {
                 if (!seenItemIds.has(candidate.Id)) {
                     seenItemIds.add(candidate.Id);
                     saveState();
-
                     const valid = await preloadImages(candidate);
                     if (valid) {
                         candidate.localTrailerData = await checkLocalTrailer(candidate.Id);
@@ -753,7 +857,7 @@ const checkNavigation = () => {
                 initOrResume();
                 attachButtonListeners();
             }
-            return
+            return;
         }
         if (isHomePageActive) {
             console.log("Leaving homepage, shutting down slideshow");
@@ -788,126 +892,95 @@ const attachButtonListeners = () => {
         console.log("Navigation button listeners attached.");
     }
 
+    window.addEventListener('focus', () => {
+        isHovering = true;
+        toggleTizenMediaKeys(true);
+        if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
+        trailerHoverTimeout = setTimeout(() => { if (isHovering && currentTrailerStarter) currentTrailerStarter(); }, 300);
+    });
+
+    window.addEventListener('blur', () => {
+        isHovering = false;
+        toggleTizenMediaKeys(false);
+        if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
+        cleanup();
+        updateVolumeButtonVisibility(false);
+        const vw = document.querySelector('.visual-wrapper');
+        if (vw) vw.style.opacity = '1';
+    });
+
+    document.body.addEventListener('mouseenter', () => { window.focus(); });
+    document.body.addEventListener('mousemove', () => { if (!isHovering) window.focus(); });
+    document.body.addEventListener('mouseleave', () => { window.blur(); });
+
     document.addEventListener('keydown', (e) => {
         if (e.key === 'ArrowRight') {
-            fetchRandomMovie();
-        }
+		fetchRandomMovie();
+	}
         else if (e.key === 'ArrowLeft') {
-            navigatePrevious();
-        }
-        else if (e.key === 'Enter') {
-            if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
-            e.stopPropagation();
-            if (window.currentMovie && window.currentMovie.Id) {
-                playMovie(window.currentMovie.Id);
-            }
-        }
+		navigatePrevious();
+	}
         else if (e.key === 'ArrowDown') {
             // Escape iframe: Push focus down to the first media card in Jellyfin
             if (window.parent) {
                 const section0 = window.parent.document.querySelector('.section0');
-                const nextCard = section0 ? section0.querySelector('.card, .itemAction, .emby-button') : null;
-                if (nextCard) nextCard.focus();
+                // Target the native focusable anchor tag inside Jellyfin's first card
+                const firstFocusable = section0 ? section0.querySelector('.card a.itemAction, .card button.itemAction') : null;
+                if (firstFocusable) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.parent.focus(); // Release iframe trap
+                    firstFocusable.focus(); // Inject focus into native UI
+                }
             }
         }
         else if (e.key === 'ArrowUp') {
             // Escape iframe: Push focus up to the Jellyfin top menu header
             if (window.parent) {
                 const topMenu = window.parent.document.querySelector('.headerTabs .emby-tab-button[data-index="0"]');
-                if (topMenu) topMenu.focus();
+                if (topMenu) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    window.parent.focus(); // Release iframe trap
+                    topMenu.focus(); // Inject focus into native UI
+                }
             }
+        }
+        else if (e.key === 'VolumeMute' || e.keyCode === 449 || e.keyCode === 173) {
+            e.preventDefault(); e.stopPropagation();
+            window.toggleTrailer();
+            return;
+        }
+        else if (e.key === 'MediaPlay' || e.key === 'Play' || e.key === 'MediaPlayPause' || e.keyCode === 415 || e.keyCode === 179 || e.keyCode === 10252) {
+            e.preventDefault(); e.stopPropagation();
+            if (window.currentMovie && window.currentMovie.Id) playMovie(window.currentMovie.Id);
+            return;
+        }
+        else if (e.key === 'Enter') {
+            if (document.activeElement && document.activeElement.tagName === 'BUTTON') return;
+            e.stopPropagation();
+            if (window.currentMovie && window.currentMovie.Id) window.parent.location.hash = '#/details?id=' + window.currentMovie.Id;
         }
         else if (e.keyCode === 10009) {
             if (window.parent) {
-                const parentDoc = window.parent.document;
-
-                // Create a clone of the keydown event (Modern Tizen/Browsers)
-                const clonedEvent = new KeyboardEvent('keydown', {
-                    key: e.key,
-                    keyCode: e.keyCode,
-                    code: e.code,
-                    which: e.keyCode,
-                    bubbles: true,
-                    cancelable: true
-                });
-
-                // Dispatch it on the parent window so Jellyfin handles it natively
-                parentDoc.dispatchEvent(clonedEvent);
+                const clonedEvent = new KeyboardEvent('keydown', { key: e.key, keyCode: e.keyCode, code: e.code, which: e.keyCode, bubbles: true, cancelable: true });
+                window.parent.document.dispatchEvent(clonedEvent);
             }
         }
-    });
-
-    document.body.addEventListener('mouseenter', () => {
-        isHovering = true;
-        if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
-        trailerHoverTimeout = setTimeout(() => {
-            if (isHovering && currentTrailerStarter) currentTrailerStarter();
-        }, 300);
-    });
-
-    document.body.addEventListener('mousemove', () => {
-        // Fallback: sometimes iframe mouseenter is finicky
-        if (!isHovering) {
-            isHovering = true;
-            if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
-            trailerHoverTimeout = setTimeout(() => {
-                if (isHovering && currentTrailerStarter) currentTrailerStarter();
-            }, 300);
-        }
-    });
-
-    document.body.addEventListener('mouseleave', () => {
-        isHovering = false;
-        if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
-        cleanup();
-        updateVolumeButtonVisibility(false);
-        const backdrop = document.querySelector('.backdrop');
-        if (backdrop) backdrop.style.opacity = '1';
     });
 };
 
 function initVolumeControl() {
     const button = document.getElementById('volumeButton');
-    const icon = button.querySelector('.material-icons');
-    const slider = document.getElementById('volumeSlider');
 
-    let muted = globalVolume === 0;
-
-    // 🔹 Initialize slider and icon state from globalVolume
-    slider.value = globalVolume * 100;
-    icon.textContent = muted ? 'volume_off' : 'volume_up';
-
-    // Toggle mute on click (ignore clicks on slider itself)
-    button.addEventListener('click', e => {
-        if (e.target === slider) return;
-        muted = !muted;
-        slider.value = muted ? 0 : globalVolume * 100 || 50; // fallback to 50 if unset
-        updateVolume(parseInt(slider.value, 10));
-        icon.textContent = muted ? 'volume_off' : 'volume_up';
-    });
-
-    // Adjust volume on slider input
-    slider.addEventListener('input', () => {
-        const vol = parseInt(slider.value, 10);
-        muted = vol === 0;
-        icon.textContent = muted ? 'volume_off' : 'volume_up';
-        updateVolume(vol);
-    });
-
-    function updateVolume(vol) {
-        globalVolume = vol / 100; // persist globally
-        localStorage.setItem('spotlightVolume', String(globalVolume));
-
-        // YouTube trailers
-        if (player?.setVolume) player.setVolume(vol);
-
-        // Local trailers
-        if (localTrailerIframe?.contentWindow) {
-            localTrailerIframe.contentWindow.postMessage(
-                { type: 'setVolume', value: globalVolume }, '*'
-            );
-        }
+    if (button) {
+        button.addEventListener('click', e => {
+            window.toggleTrailer();
+        });
     }
+
+    const slider = document.getElementById('volumeSlider');
+    if (slider) slider.style.display = 'none';
 }
 
 // Initialize the slideshow once the DOM is fully loaded
@@ -928,19 +1001,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Expose controlYouTubePlayer to the global window scope
 window.controlYouTubePlayer = {
-    // Toggle play/pause state of the YouTube player
     toggle: function () {
-        if (player && typeof player.getPlayerState === 'function') {
-            const state = player.getPlayerState();
-            if (state === YT.PlayerState.PLAYING) {
-                player.pauseVideo();
-                console.log("YouTube player paused.");
-            } else {
-                player.playVideo();
-                console.log("YouTube player playing.");
-            }
-        } else {
-            console.warn('YouTube player is not initialized or not available.');
-        }
+        window.toggleTrailer();
     }
 };

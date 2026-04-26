@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="spotlight.css">
 
     <!-- Theme Variable Injection from Parent with Fallbacks -->
-	<script src="spotlight-head.js"></script>
+    <script src="spotlight-head.js"></script>
 </head>
 <body>
     <div class="spotlight-wrapper">
@@ -19,7 +19,7 @@
             <button id="leftButton" type="button" disabled tabindex="0" aria-label="Previous Movie">
                 <span class="material-icons" aria-hidden="true">chevron_left</span>
             </button>
-			<button id="volumeButton" type="button" tabindex="0" aria-label="Volume">
+			<button id="volumeButton" type="button" tabindex="0" title="Toggle Information / Pause Trailer" aria-label="Toggle Information">
 				<span class="material-icons" aria-hidden="true">volume_up</span>
 				<div id="volumeHoverZone"></div>
 				<input id="volumeSlider" type="range" min="0" max="100" value="50">
@@ -29,8 +29,7 @@
             </button>
         </div>
     </div>
-	
-			
+
     <script src="spotlight-body.js"></script>
 </body>
 </html>

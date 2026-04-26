@@ -279,6 +279,9 @@ const shutdown = () => {
     isHomePageActive = false;
     isChangingSlide = false;
 
+    isHovering = false;
+    toggleTizenMediaKeys(false);
+
     saveState();
 
     isPreloading = false;
@@ -754,6 +757,7 @@ const initOrResume = async () => {
     if (window.currentSlideElement && container && container.contains(window.currentSlideElement)) {
         updateSlideButtons();
         isChangingSlide = false;
+        syncFocusState();
         preloadNextMovies();
         return;
     }
@@ -938,6 +942,26 @@ const checkNavigation = () => {
     }
 };
 
+// Helper to manually sync focus state. Fixes race conditions on load
+// and silent focus restoration when unhiding the DOM cache.
+function syncFocusState() {
+    const hasFocus = document.hasFocus();
+
+    // If our internal state already perfectly matches reality, do nothing
+    if (isHovering === hasFocus) return;
+
+    if (hasFocus) {
+        isHovering = true;
+        toggleTizenMediaKeys(true);
+        if (currentTrailerStarter) {
+            if (trailerHoverTimeout) clearTimeout(trailerHoverTimeout);
+            trailerHoverTimeout = setTimeout(() => {
+                if (isHovering && currentTrailerStarter) currentTrailerStarter();
+            }, 300);
+        }
+    }
+}
+
 // Attach event listeners to navigation buttons
 const attachButtonListeners = () => {
     if (listenersAttached) return;
@@ -1017,6 +1041,8 @@ const attachButtonListeners = () => {
             }
         }
     });
+
+    syncFocusState();
 };
 
 function initVolumeControl() {

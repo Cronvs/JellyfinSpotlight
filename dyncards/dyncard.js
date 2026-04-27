@@ -1,7 +1,7 @@
 // dynamic-hover.js
 
 (function() {
-    const configScriptUrl = '/web/custom/ui/dyncard-config.js'; 
+    const configScriptUrl = 'dyncard-config.js';
 
     function loadConfig(url, callback) {
         const script = document.createElement('script');
@@ -27,14 +27,13 @@
         }
 
         const dynamicStyleBlock = document.createElement('style');
-        dynamicStyleBlock.id = "random-hover-plugin-styles";
+        dynamicStyleBlock.id = "dyn-tv-styles";
         document.head.appendChild(dynamicStyleBlock);
 
         function applyRandomBackgrounds() {
             const cards = document.querySelectorAll('.card:not(.random-bg-applied)');
 
             cards.forEach(card => {
-                // Find the image container inside the card
                 const imageContainer = card.querySelector('.cardImageContainer');
 
                 // If it doesn't exist, mark card as processed and skip
@@ -44,12 +43,12 @@
                 }
 
                 // Grab the aria-label (usually the media title)
-                const label = imageContainer.getAttribute('aria-label');
+                let label = card.getAttribute('aria-label');
 
                 if (label && window.dynamicBackgrounds[label]) {
                     const pairs = window.dynamicBackgrounds[label];
                     const randomPair = pairs[Math.floor(Math.random() * pairs.length)];
-                    const uniqueClass = `dyn-hover-${Math.random().toString(36).substr(2, 9)}`;
+                    const uniqueClass = `tizen-${Math.random().toString(36).substr(2, 5)}`;
                     const sheet = dynamicStyleBlock.sheet;
 
                     if (randomPair.default) {

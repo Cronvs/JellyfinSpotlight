@@ -46,7 +46,7 @@
             max-height: 90vh;
             aspect-ratio: 7/4;
             display: block;
-            border: 0;
+            border: none;
             margin: -8.5em auto -55px auto; 
             overflow: hidden;
             outline: none;

@@ -1,0 +1,15 @@
+/* =========================================
+   TIZEN SMART TV OVERRIDES: THE TITANIUM OPTION
+========================================= */
+/* 3. Force-hide the library card text on Tizen (from before) */
+.verticalSection.section0 .card[data-type="CollectionFolder"] .cardText,
+.verticalSection.section0 .card[data-type="UserView"] .cardText,
+.layout-tv .verticalSection.section0 .textActionButton[data-type="CollectionFolder"],
+.layout-tv .verticalSection.section0 .textActionButton[data-type="UserView"] {
+  display: none;
+}
+
+/* 1. Global Reset for Tizen Browser-Level Outlines */
+.cardScalable {
+    border: none !important;
+}

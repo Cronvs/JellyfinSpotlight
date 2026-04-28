@@ -56,7 +56,7 @@
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
-            border: 0; outline: none;
+            border: none; outline: none;
             background: transparent;
             z-index: 2; /* Keep iframe text above the video */
         `;

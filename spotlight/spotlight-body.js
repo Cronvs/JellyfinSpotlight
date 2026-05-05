@@ -117,7 +117,7 @@ async function playMovie(itemId) {
             PlayCommand: 'PlayNow',
             ItemIds: [itemId],
             StartPositionTicks: 0,
-            ControllingUserId: client.getCurrentUserId() 
+            ControllingUserId: client.getCurrentUserId()
         });
     }
 }
@@ -158,7 +158,7 @@ const cleanup = () => {
         localTrailerIframe = null;
         console.log("Local trailer iframe removed.");
     }
-    document.querySelectorAll(".video-container").forEach(e => e.remove())
+    document.querySelectorAll(".video-container").forEach(e => e.remove());
     if (slideChangeTimeout) {
         clearTimeout(slideChangeTimeout);
         slideChangeTimeout = null;
@@ -321,15 +321,15 @@ const createSlideElement = async (movie) => {
     const btnContainer = createElem('div', 'hero-buttons');
     const playBtn = createElem('button', 'btn-hero btn-play');
     playBtn.innerHTML = '<span class="material-icons">play_arrow</span> Play';
-    playBtn.onclick = (e) => { 
+    playBtn.onclick = (e) => {
         e.stopPropagation();
         playMovie(movie.Id);
     };
     const infoBtn = createElem('button', 'btn-hero btn-info');
     infoBtn.innerHTML = '<span class="material-icons">info_outline</span> More Info';
-    infoBtn.onclick = (e) => { 
-        e.stopPropagation(); 
-        window.top.Emby.Page.showItem(movie.Id); 
+    infoBtn.onclick = (e) => {
+        e.stopPropagation();
+        window.parent.location.hash = '#/details?id=' + movie.Id;
     };
     
     btnContainer.appendChild(playBtn);

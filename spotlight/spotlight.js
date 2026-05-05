@@ -47,7 +47,7 @@
             aspect-ratio: 7/4;
             display: block;
             border: none;
-            margin: -8.5em auto -55px auto; 
+            margin: -8.5em auto -55px auto;
             overflow: hidden;
             outline: none;
         `;

@@ -1,7 +1,7 @@
 // dynamic-hover.js
 
 (function() {
-    const configScriptUrl = '/web/custom/ui/dyncard-config.js'; 
+    const configScriptUrl = '/web/custom/ui/dyncard-config.js';
 
     function loadConfig(url, callback) {
         const script = document.createElement('script');
@@ -60,29 +60,32 @@
                         `, sheet.cssRules.length);
                     }
 
-                    sheet.insertRule(`
-                        .${uniqueClass} .cardImageContainer::after {
-                            content: "";
-                            background-image: url("${randomPair.hover}");
-                            background-size: contain;
-                            background-repeat: no-repeat;
-                            background-position: center;
-                            opacity: 0;
-                            transition: opacity 0.3s ease, transform 0.3s ease;
-                            position: absolute;
-                            top: 0; left: 0; width: 100%; height: 100%;
-                            pointer-events: none;
-                        }
-                    `, sheet.cssRules.length);
+                    // ONLY insert hover rules if a hover image exists in the config
+                    if (randomPair.hover) {
+                        sheet.insertRule(`
+                            .${uniqueClass} .cardImageContainer::after {
+                                content: "";
+                                background-image: url("${randomPair.hover}");
+                                background-size: contain;
+                                background-repeat: no-repeat;
+                                background-position: center;
+                                opacity: 0;
+                                transition: opacity 0.3s ease, transform 0.3s ease;
+                                position: absolute;
+                                top: 0; left: 0; width: 100%; height: 100%;
+                                pointer-events: none;
+                            }
+                        `, sheet.cssRules.length);
 
-                    sheet.insertRule(`
-                        .${uniqueClass}:hover .cardImageContainer::after,
-                        .${uniqueClass}:focus-within .cardImageContainer::after,
-                        .${uniqueClass}.show-animation:focus .cardImageContainer::after {
-                            opacity: 1;
-                            transform: scale(1.05);
-                        }
-                    `, sheet.cssRules.length);
+                        sheet.insertRule(`
+                            .${uniqueClass}:hover .cardImageContainer::after,
+                            .${uniqueClass}:focus-within .cardImageContainer::after,
+                            .${uniqueClass}.show-animation:focus .cardImageContainer::after {
+                                opacity: 1;
+                                transform: scale(1.05);
+                            }
+                        `, sheet.cssRules.length);
+                    }
 
                     card.classList.add(uniqueClass, 'random-bg-applied');
                 } else {

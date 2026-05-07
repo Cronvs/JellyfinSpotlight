@@ -4,20 +4,23 @@
     const configScriptUrl = 'dyncard-config.js';
 
     function loadConfig(url, callback) {
-        const script = document.createElement('script');
-        script.type = 'text/javascript';
-        script.src = url;
-
-        script.onload = () => {
-            console.log('Dynamic Backgrounds: Config loaded successfully.');
-            callback();
-        };
-
-        script.onerror = () => {
-            console.error('Dynamic Backgrounds: Failed to load config from', url);
-        };
-
-        document.head.appendChild(script);
+        fetch(url)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! Status: ${response.status}`);
+                }
+                // Automatically parse the response as JSON
+                return response.json();
+            })
+            .then(data => {
+                // Assign the parsed JSON data directly to your window variable
+                window.dynamicBackgrounds = data;
+                console.log('Dynamic Backgrounds: Remote JSON config loaded successfully.');
+                callback();
+            })
+            .catch(error => {
+                console.error('Dynamic Backgrounds: Failed to fetch remote config from', url, error);
+            });
     }
 
     function initPlugin() {

@@ -27,6 +27,16 @@ let isFetchingIds = false;
 let failedFetchCount = 0;
 let latestItemsCache = null;
 
+const apiFetch = (url) => {
+    return fetch(url, {
+        method: 'GET',
+        headers: {
+            'Authorization': `MediaBrowser Token="${token}"`,
+            'Accept': 'application/json'
+        }
+    });
+};
+
 // Get User Auth token
 const getJellyfinAuth = () => {
     let token = null; let userId = null; let serverUrl = '';
@@ -329,7 +339,7 @@ async function checkLocalTrailer(itemId) {
     if (!token || !uid) return null;
 
     try {
-        const res = await fetch(`${baseUrl}/Users/${uid}/Items/${itemId}/LocalTrailers?api_key=${token}`);
+        const res = await apiFetch(`${baseUrl}/Users/${uid}/Items/${itemId}/LocalTrailers`);
         if (!res.ok) return null;
         const arr = await res.json();
         if (!arr?.length) return null;
@@ -639,7 +649,7 @@ async function fetchMoreIds() {
             const uid = fallbackUserId;
             const itemTypes = moviesSeriesBoth === 1 ? 'Movie' : (moviesSeriesBoth === 2 ? 'Series' : 'Movie,Series');
 
-            const res = await fetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&SortBy=Random&Limit=10&Fields=Id&api_key=${token}&_t=${Date.now()}`);
+            const res = await apiFetch(`${baseUrl}/Users/${uid}/Items?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Recursive=true&SortBy=Random&Limit=10&Fields=Id&_t=${Date.now()}`);
             const data = await res.json();
 
             let added = 0;
@@ -704,7 +714,7 @@ async function preloadNextMovies() {
 
         const uid = fallbackUserId;
         try {
-            const res = await fetch(`${baseUrl}/Users/${uid}/Items?Ids=${nextId}&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+            const res = await apiFetch(`${baseUrl}/Users/${uid}/Items?Ids=${nextId}&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating`);
             const data = await res.json();
             const movie = data.Items && data.Items[0];
 
@@ -798,7 +808,7 @@ const fetchNextMovie = async () => {
         }
         try {
             if (!latestItemsCache) {
-                const r = await fetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating&api_key=${token}`);
+                const r = await apiFetch(`${baseUrl}/Users/${uid}/Items/Latest?IncludeItemTypes=${itemTypes}&MinCommunityRating=4&Limit=15&Fields=Id,Overview,RemoteTrailers,PremiereDate,RunTimeTicks,ChildCount,Title,Type,Genres,OfficialRating,CommunityRating`);
                 latestItemsCache = await r.json();
             }
 

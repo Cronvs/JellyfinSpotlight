@@ -10,7 +10,7 @@ OUTPUT_FILE    = '/usr/share/jellyfin/web/custom/ui/dyncard-config.js'
 WEB_PREFIX     = '/web/custom/ui/cards'
 
 # Supported image extensions
-VALID_EXTS     = ('.jpg', '.jpeg', '.png', '.gif', '.webp')
+VALID_EXTS     = ('.mp4', '.webm', '.mkv')
 # ---------------------
 
 backgrounds = {}

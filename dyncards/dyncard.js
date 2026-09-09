@@ -39,32 +39,35 @@
         hoverVideo.loop = true;
         hoverVideo.setAttribute('playsinline', 'true');
         hoverVideo.style.cssText = `
-            position: fixed;
-            z-index: 9999;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
             display: none;
             pointer-events: none;
             object-fit: cover;
             border-radius: inherit;
         `;
-        document.body.appendChild(hoverVideo);
 
         function playHoverVideo(e) {
             const card = e.currentTarget;
-            const rect = card.getBoundingClientRect();
+            const imageContainer = card.querySelector('.cardImageContainer');
+            if (!imageContainer) return;
 
-            // 1. Pause the Spotlight video when focusing a card
+            // 1. Pause the Spotlight video to free the hardware decoder
             const spotlightVideo = document.getElementById('tizen-hardware-video');
             if (spotlightVideo && !spotlightVideo.paused) {
                 spotlightVideo.pause();
-                // Tag the video so we know dyncard paused it, not the user
                 spotlightVideo.dataset.pausedByDyncard = 'true';
             }
 
-            // 2. Position the shared hover video
-            hoverVideo.style.top = `${rect.top}px`;
-            hoverVideo.style.left = `${rect.left}px`;
-            hoverVideo.style.width = `${rect.width}px`;
-            hoverVideo.style.height = `${rect.height}px`;
+            // 2. Move the video element INTO the image container so it tracks layout shifts
+            if (hoverVideo.parentNode !== imageContainer) {
+                imageContainer.appendChild(hoverVideo);
+            }
+
             hoverVideo.style.display = 'block';
 
             // 3. Load and play
@@ -77,12 +80,10 @@
         function stopHoverVideo(e) {
             hoverVideo.pause();
             hoverVideo.style.display = 'none';
-            hoverVideo.src = '';
 
-            // 4. Check where focus went after leaving the card
+            // 4. Check if focus returned to the spotlight iframe
             setTimeout(() => {
                 const active = document.activeElement;
-                // Check if focus returned to the spotlight iframe or its wrapper
                 const isTrailerFocused = active && (active.id === 'spotlight-iframe' || active.closest('#spotlight-wrapper-tizen'));
 
                 const spotlightVideo = document.getElementById('tizen-hardware-video');
@@ -91,7 +92,7 @@
                     spotlightVideo.play().catch(err => console.error("Spotlight resume failed", err));
                     spotlightVideo.dataset.pausedByDyncard = 'false';
                 }
-            }, 50); // 50ms delay allows Tizen's spatial navigation to update document.activeElement
+            }, 50);
         }
 
         function applyRandomBackgrounds() {

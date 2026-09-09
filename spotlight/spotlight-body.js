@@ -252,6 +252,21 @@ const displayError = (message) => {
 
 // Clean up existing player and timeout
 const cleanup = () => {
+    if (window.iframeExpandTimeout) {
+        clearTimeout(window.iframeExpandTimeout);
+        window.iframeExpandTimeout = null;
+    }
+    const wrapper = window.parent.document.getElementById('spotlight-wrapper-tizen');
+    if (wrapper) {
+        wrapper.style.transition = "height 2.5s ease-in-out 1.5s, min-height 2.5s ease-in-out 1.5s, max-height 2.5s ease-in-out 1.5s, margin-bottom 2.5s ease-in-out 1.5s";
+        wrapper.style.height = "75vh";
+        wrapper.style.minHeight = "75vh";
+        wrapper.style.maxHeight = "90vh";
+        wrapper.style.marginBottom = "-55px";
+    }
+    if (window.currentSlideElement) {
+        window.currentSlideElement.classList.remove('fullscreen');
+    }
     if (player && typeof player.stopVideo === 'function') {
         player.stopVideo();
         player.destroy();
@@ -582,6 +597,32 @@ const createSlideElement = async (movie) => {
                          updateVolumeButtonVisibility(true);
                          const txt = newSlide.querySelector('.text-container');
                          if(txt) txt.classList.add('fade-out');
+                         window.iframeExpandTimeout = setTimeout(() => {
+                             if (isHovering && txt && txt.classList.contains('fade-out')) {
+                                 const wrapper = parentDoc.getElementById('spotlight-wrapper-tizen');
+                                 if (wrapper) {
+                                     wrapper.style.transition = "height 2.5s ease-in-out 0s, min-height 2.5s ease-in-out 0s, max-height 2.5s ease-in-out 0s, margin-bottom 2.5s ease-in-out 0s";
+                                     wrapper.style.height = "100vh";
+                                     wrapper.style.minHeight = "100vh";
+                                     wrapper.style.maxHeight = "100vh";
+                                     wrapper.style.marginBottom = "0px";
+                                 }
+                                 if (window.currentSlideElement) {
+                                     window.currentSlideElement.classList.add('fullscreen');
+                                 }
+                                 const hwVideo = parentDoc.getElementById('tizen-hardware-video');
+                                 if (hwVideo) {
+                                     hwVideo.style.transition = "height 2.5s ease-in-out 0s";
+                                     hwVideo.style.setProperty('height', '100%', 'important');
+                                 }
+                                 const matteOverlay = parentDoc.getElementById('tizen-matte-overlay');
+                                 if (matteOverlay) {
+                                     matteOverlay.style.transition = "bottom 2.5s ease-in-out 0s, opacity 2.5s ease-in-out 0s";
+                                     matteOverlay.style.bottom = "-55px";
+                                     matteOverlay.style.opacity = "0";
+                                 }
+                             }
+                         }, 11000);
                      }
                  }, 500);
             }

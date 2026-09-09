@@ -157,6 +157,20 @@ const displayError = (message) => {
 
 // Clean up existing player and timeout
 const cleanup = () => {
+    if (window.iframeExpandTimeout) {
+        clearTimeout(window.iframeExpandTimeout);
+        window.iframeExpandTimeout = null;
+    }
+    const parentIframe = window.parent.document.getElementById("spotlight-iframe");
+    if (parentIframe) {
+        parentIframe.style.transition = "min-height 2.5s ease-in-out 1.5s, max-height 2.5s ease-in-out 1.5s, margin-bottom 2.5s ease-in-out 1.5s";
+        parentIframe.style.minHeight = "75vh";
+        parentIframe.style.maxHeight = "90vh";
+        parentIframe.style.marginBottom = "-55px";
+    }
+    if (window.currentSlideElement) {
+        window.currentSlideElement.classList.remove('fullscreen');
+    }
     if (player && typeof player.stopVideo === 'function') {
         player.stopVideo();
         player.destroy();
@@ -401,6 +415,18 @@ const createSlideElement = async (movie) => {
                             updateVolumeButtonVisibility(true);
                             const txt = newSlide.querySelector('.text-container');
                             if(txt) txt.classList.add('fade-out');
+                            window.iframeExpandTimeout = setTimeout(() => {
+                                if (isHovering && txt && txt.classList.contains('fade-out')) {
+                                    const parentIframe = window.parent.document.getElementById("spotlight-iframe");
+                                    if (parentIframe) {
+                                        parentIframe.style.transition = "min-height 2.5s ease-in-out 0s, max-height 2.5s ease-in-out 0s, margin-bottom 2.5s ease-in-out 0s";
+                                        parentIframe.style.minHeight = "100vh";
+                                        parentIframe.style.maxHeight = "100vh";
+                                        parentIframe.style.marginBottom = "0px";
+                                    }
+                                    newSlide.classList.add('fullscreen');
+                                }
+                            }, 11000);
                         },
                         'onStateChange': (e) => {
                             if (e.data === YT.PlayerState.ENDED) { backdropImg.style.opacity = '1'; cleanup(); }
@@ -421,6 +447,18 @@ const createSlideElement = async (movie) => {
                          updateVolumeButtonVisibility(true);
                          const txt = newSlide.querySelector('.text-container');
                          if(txt) txt.classList.add('fade-out');
+                         window.iframeExpandTimeout = setTimeout(() => {
+                             if (isHovering && txt && txt.classList.contains('fade-out')) {
+                                 const parentIframe = window.parent.document.getElementById("spotlight-iframe");
+                                 if (parentIframe) {
+                                     parentIframe.style.transition = "min-height 2.5s ease-in-out 0s, max-height 2.5s ease-in-out 0s, margin-bottom 2.5s ease-in-out 0s";
+                                     parentIframe.style.minHeight = "100vh";
+                                     parentIframe.style.maxHeight = "100vh";
+                                     parentIframe.style.marginBottom = "0px";
+                                 }
+                                 newSlide.classList.add('fullscreen');
+                             }
+                         }, 11000);
                      }
                  }, 500);
             }

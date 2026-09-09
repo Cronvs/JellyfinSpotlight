@@ -50,6 +50,7 @@
             margin: -8.5em auto -55px auto;
             overflow: hidden;
             outline: none;
+            transition: min-height 2.5s ease-in-out 1.5s, max-height 2.5s ease-in-out 1.5s, margin-bottom 2.5s ease-in-out 1.5s;
         `;
 
         iframe.src = "/web/custom/ui/spotlight.html";

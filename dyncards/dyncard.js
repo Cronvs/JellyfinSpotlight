@@ -9,11 +9,9 @@
                 if (!response.ok) {
                     throw new Error(`HTTP error! Status: ${response.status}`);
                 }
-                // Automatically parse the response as JSON
                 return response.json();
             })
             .then(data => {
-                // Assign the parsed JSON data directly to your window variable
                 window.dynamicBackgrounds = data;
                 console.log('Dynamic Backgrounds: Remote JSON config loaded successfully.');
                 callback();
@@ -33,6 +31,10 @@
         dynamicStyleBlock.id = "dyn-tv-styles";
         document.head.appendChild(dynamicStyleBlock);
 
+        // --- 1. SETUP SINGLETON HARDWARE PLAYER ---
+        const oldVid = document.getElementById('tizen-hover-video');
+        if (oldVid) oldVid.remove();
+
         const hoverVideo = document.createElement('video');
         hoverVideo.id = 'tizen-hover-video';
         hoverVideo.muted = true;
@@ -40,52 +42,81 @@
         hoverVideo.setAttribute('playsinline', 'true');
         hoverVideo.style.cssText = `
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 10;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            z-index: 5;
             display: none;
             pointer-events: none;
             object-fit: cover;
             border-radius: inherit;
         `;
 
+        let hoverIntentTimeout = null;
+        let activeImageContainer = null;
+
         function playHoverVideo(e) {
             const card = e.currentTarget;
             const imageContainer = card.querySelector('.cardImageContainer');
             if (!imageContainer) return;
 
-            // 1. Pause the Spotlight video to free the hardware decoder
-            const spotlightVideo = document.getElementById('tizen-hardware-video');
-            if (spotlightVideo && !spotlightVideo.paused) {
-                spotlightVideo.pause();
-                spotlightVideo.dataset.pausedByDyncard = 'true';
-            }
+            if (hoverIntentTimeout) clearTimeout(hoverIntentTimeout);
 
-            // 2. Move the video element INTO the image container so it tracks layout shifts
-            if (hoverVideo.parentNode !== imageContainer) {
-                imageContainer.appendChild(hoverVideo);
-            }
+            // Wait 600ms for UI movements to stabilize
+            hoverIntentTimeout = setTimeout(() => {
+                if (document.activeElement !== card && !card.matches(':hover')) return;
 
-            hoverVideo.style.display = 'block';
+                // Pause Spotlight to free the hardware decoder
+                const spotlightVideo = document.getElementById('tizen-hardware-video');
+                if (spotlightVideo && !spotlightVideo.paused) {
+                    spotlightVideo.pause();
+                    spotlightVideo.dataset.pausedByDyncard = 'true';
+                }
 
-            // 3. Load and play
-            if (hoverVideo.src !== card.dataset.hoverVideo) {
-                hoverVideo.src = card.dataset.hoverVideo;
-            }
-            hoverVideo.play().catch(err => console.error("Hover playback failed", err));
+                // Inject video INSIDE the card
+                if (hoverVideo.parentNode !== imageContainer) {
+                    imageContainer.appendChild(hoverVideo);
+                }
+                activeImageContainer = imageContainer;
+
+                // HIDE the CSS background image so the video is visible
+                if (imageContainer.style.backgroundImage !== 'none') {
+                    imageContainer.dataset.originalBg = imageContainer.style.backgroundImage;
+                    imageContainer.style.backgroundImage = 'none';
+                }
+
+                // Force clipping to rounded borders via translateZ
+                imageContainer.style.transform = 'translateZ(0)';
+                imageContainer.style.overflow = 'hidden';
+
+                hoverVideo.style.display = 'block';
+
+                if (hoverVideo.src !== card.dataset.hoverVideo) {
+                    hoverVideo.src = card.dataset.hoverVideo;
+                }
+                hoverVideo.play().catch(err => console.error("Hover playback failed", err));
+
+            }, 50);
         }
 
         function stopHoverVideo(e) {
+            if (hoverIntentTimeout) clearTimeout(hoverIntentTimeout);
+
             hoverVideo.pause();
             hoverVideo.style.display = 'none';
 
-            // 4. Check if focus returned to the spotlight iframe
+            // RESTORE the CSS background image and clean up transforms
+            if (activeImageContainer) {
+                if (activeImageContainer.dataset.originalBg) {
+                    activeImageContainer.style.backgroundImage = activeImageContainer.dataset.originalBg;
+                }
+                activeImageContainer.style.transform = '';
+                activeImageContainer = null;
+            }
+
+            // Resume Spotlight
             setTimeout(() => {
                 const active = document.activeElement;
                 const isTrailerFocused = active && (active.id === 'spotlight-iframe' || active.closest('#spotlight-wrapper-tizen'));
-
                 const spotlightVideo = document.getElementById('tizen-hardware-video');
 
                 if (isTrailerFocused && spotlightVideo && spotlightVideo.dataset.pausedByDyncard === 'true') {
@@ -97,19 +128,14 @@
 
         function applyRandomBackgrounds() {
             const cards = document.querySelectorAll('.card:not(.random-bg-applied)');
-
             cards.forEach(card => {
                 const imageContainer = card.querySelector('.cardImageContainer');
-
-                // If it doesn't exist, mark card as processed and skip
                 if (!imageContainer) {
                     card.classList.add('random-bg-applied');
                     return;
                 }
 
-                // Grab the aria-label (usually the media title)
                 let label = card.getAttribute('aria-label');
-
                 if (label && window.dynamicBackgrounds[label]) {
                     const pairs = window.dynamicBackgrounds[label];
                     const randomPair = pairs[Math.floor(Math.random() * pairs.length)];
@@ -124,17 +150,16 @@
                         `, sheet.cssRules.length);
                     }
 
-                    // ONLY insert hover rules if a hover image exists in the config
                     if (randomPair.hover) {
-                        // 1. Check if the hover asset is a video file
+                        // 1. Hardware Video Handling
                         if (randomPair.hover.match(/\.(mp4|webm|mkv)$/i)) {
                             card.dataset.hoverVideo = randomPair.hover;
                             card.addEventListener('mouseenter', playHoverVideo);
                             card.addEventListener('focus', playHoverVideo);
                             card.addEventListener('mouseleave', stopHoverVideo);
                             card.addEventListener('blur', stopHoverVideo);
-                        }
-                        // 2. ELSE: It is a standard image, so use your existing CSS injection
+                        } 
+                        // 2. Standard Image Handling (Fallback to CSS)
                         else {
                             sheet.insertRule(`
                                 .${uniqueClass} .cardImageContainer::after {
@@ -160,7 +185,6 @@
                             `, sheet.cssRules.length);
                         }
                     }
-
                     card.classList.add(uniqueClass, 'random-bg-applied');
                 } else {
                     card.classList.add('random-bg-applied');

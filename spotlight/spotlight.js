@@ -44,6 +44,7 @@
             aspect-ratio: 7/4;
             margin: -8.5em auto -55px auto;
             overflow: hidden;
+            transition: height 2.5s ease-in-out 1.5s, min-height 2.5s ease-in-out 1.5s, max-height 2.5s ease-in-out 1.5s, margin-bottom 2.5s ease-in-out 1.5s;
         `;
 
         const iframe = document.createElement("iframe");

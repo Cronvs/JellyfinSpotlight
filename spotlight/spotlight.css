@@ -53,7 +53,7 @@ body {
   height: 100%;
   opacity: 0;
   filter: blur(5px);
-  transition: opacity 1.3s ease, filter 1.3s ease;
+  transition: opacity 1.3s ease, filter 1.3s ease, mask-size 2.5s ease-in-out 0s, -webkit-mask-size 2.5s ease-in-out 0s;
   mask-image: linear-gradient(to bottom,
       black 0%,
       black calc(100% - 100px),
@@ -64,11 +64,21 @@ body {
       black calc(100% - 100px),
       transparent calc(100% - 55px),
       transparent 100%);
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
 }
 
 .slide.visible {
   opacity: 1;
   filter: blur(0);
+}
+
+.slide.fullscreen {
+  mask-size: 100% 200%;
+  -webkit-mask-size: 100% 200%;
+  transition: opacity 1.3s ease, filter 1.3s ease, mask-size 2.5s ease-in-out 1.5s, -webkit-mask-size 2.5s ease-in-out 1.5s;
 }
 
 /* Backdrop Image */
